@@ -160,3 +160,35 @@ def test_deepseek_client_publishes_structured_patch_schema():
     )
 
     client.next_action("Negation is broken", history=[])
+
+
+def test_deepseek_client_publishes_only_registered_test_commands():
+    registered = (
+        'python -c "assert broken()"',
+        'python -c "assert fixed()"',
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        run_tests_tool = next(
+            tool for tool in payload["tools"] if tool["function"]["name"] == "run_tests"
+        )
+        command_schema = run_tests_tool["function"]["parameters"]["properties"]["command"]
+        assert command_schema["enum"] == list(registered)
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": "No test required."}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 4},
+            },
+        )
+
+    client = DeepSeekModelClient(
+        api_key="test-key",
+        model="deepseek-v4-flash",
+        base_url="https://api.deepseek.com",
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        test_commands=registered,
+    )
+
+    client.next_action("Negation is broken", history=[])

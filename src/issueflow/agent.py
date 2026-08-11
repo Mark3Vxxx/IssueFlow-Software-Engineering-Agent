@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 from collections.abc import Callable
+from copy import deepcopy
 from pathlib import Path
 from time import monotonic
 from typing import Any, Protocol
@@ -144,11 +145,13 @@ class DeepSeekModelClient:
         model: str,
         base_url: str,
         http_client: httpx.Client | None = None,
+        test_commands: tuple[str, ...] = (),
     ) -> None:
         self.api_key = api_key
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.http_client = http_client or httpx.Client(timeout=60)
+        self.test_commands = tuple(dict.fromkeys(test_commands))
 
     def next_action(self, issue: str, history: list[dict[str, object]]) -> ModelAction:
         """Request exactly one structured tool action, or a final response."""
@@ -163,9 +166,10 @@ class DeepSeekModelClient:
                         "role": "system",
                         "content": (
                             "You are a single software-repair agent. Use one provided tool at a "
-                            "time. Inspect evidence before editing, use unified diffs, and run the "
-                            "registered tests. Never invent tools or shell commands. When the repair "
-                            "is complete, answer briefly without a tool call."
+                            "time. Inspect evidence before editing, replace exact text copied from "
+                            "read_file, and run the registered tests. Never invent tools or shell "
+                            "commands. When the repair is complete, answer briefly without a tool "
+                            "call."
                         ),
                     },
                     {
@@ -173,7 +177,7 @@ class DeepSeekModelClient:
                         "content": f"Issue:\n{issue}\n\nTool history (JSON):\n{context}",
                     },
                 ],
-                "tools": TOOL_DEFINITIONS,
+                "tools": self._tool_definitions(),
                 "tool_choice": "auto",
                 "thinking": {"type": "disabled"},
                 "stream": False,
@@ -208,6 +212,16 @@ class DeepSeekModelClient:
             output_tokens=output_tokens,
             cost_usd=cost_usd,
         )
+
+    def _tool_definitions(self) -> list[dict[str, Any]]:
+        """Return request-local tools constrained to this benchmark case."""
+        definitions = deepcopy(TOOL_DEFINITIONS)
+        if not self.test_commands:
+            return definitions
+        run_tests = next(tool for tool in definitions if tool["function"]["name"] == "run_tests")
+        command = run_tests["function"]["parameters"]["properties"]["command"]
+        command["enum"] = list(self.test_commands)
+        return definitions
 
     def _estimate_cost(
         self, usage: dict[str, object], input_tokens: int, output_tokens: int

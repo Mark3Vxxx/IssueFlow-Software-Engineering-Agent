@@ -39,7 +39,10 @@ class TraceStore:
                     id TEXT PRIMARY KEY,
                     case_id TEXT NOT NULL,
                     status TEXT NOT NULL,
-                    stop_reason TEXT
+                    stop_reason TEXT,
+                    functional_success INTEGER,
+                    review_status TEXT,
+                    review_reasons TEXT NOT NULL DEFAULT '[]'
                 );
                 CREATE TABLE IF NOT EXISTS trace_steps (
                     run_id TEXT NOT NULL,
@@ -61,6 +64,13 @@ class TraceStore:
             columns = {row[1] for row in connection.execute("PRAGMA table_info(runs)").fetchall()}
             if "stop_reason" not in columns:
                 connection.execute("ALTER TABLE runs ADD COLUMN stop_reason TEXT")
+            for name, definition in {
+                "functional_success": "INTEGER",
+                "review_status": "TEXT",
+                "review_reasons": "TEXT NOT NULL DEFAULT '[]'",
+            }.items():
+                if name not in columns:
+                    connection.execute(f"ALTER TABLE runs ADD COLUMN {name} {definition}")
             step_columns = {
                 row[1] for row in connection.execute("PRAGMA table_info(trace_steps)").fetchall()
             }
@@ -106,21 +116,86 @@ class TraceStore:
                 ),
             )
 
-    def finish_run(self, run_id: str, status: RunStatus, stop_reason: str) -> None:
+    def start_run(self, run_id: str) -> None:
+        """Transition one queued run to running exactly once."""
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "UPDATE runs SET status = ? WHERE id = ? AND status = ?",
+                (RunStatus.RUNNING.value, run_id, RunStatus.QUEUED.value),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("start_run requires a queued run")
+
+    def finish_run(
+        self,
+        run_id: str,
+        status: RunStatus,
+        stop_reason: str,
+        *,
+        functional_success: bool | None = None,
+        review_status: str | None = None,
+        review_reasons: list[str] | None = None,
+    ) -> None:
         """Record the terminal outcome and its human-readable stopping reason."""
         if not status.is_terminal:
             raise ValueError("finish_run requires a terminal status")
         with self._connect() as connection:
-            connection.execute(
-                "UPDATE runs SET status = ?, stop_reason = ? WHERE id = ?",
-                (status.value, redact(stop_reason), run_id),
+            cursor = connection.execute(
+                """
+                UPDATE runs
+                SET status = ?, stop_reason = ?, functional_success = ?,
+                    review_status = ?, review_reasons = ?
+                WHERE id = ? AND status = ?
+                """,
+                (
+                    status.value,
+                    redact(stop_reason),
+                    None if functional_success is None else int(functional_success),
+                    review_status,
+                    json.dumps(
+                        [redact(reason) for reason in review_reasons or []],
+                        ensure_ascii=False,
+                    ),
+                    run_id,
+                    RunStatus.RUNNING.value,
+                ),
             )
+            if cursor.rowcount != 1:
+                raise ValueError("finish_run requires a running run")
+
+    def get_run(self, run_id: str) -> RunRecord:
+        """Load one run summary for services and UI consumers."""
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT id, case_id, status, stop_reason, functional_success,
+                       review_status, review_reasons
+                FROM runs WHERE id = ?
+                """,
+                (run_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(run_id)
+        return RunRecord(
+            id=row[0],
+            case_id=row[1],
+            status=RunStatus(row[2]),
+            stop_reason=row[3],
+            functional_success=None if row[4] is None else bool(row[4]),
+            review_status=row[5],
+            review_reasons=json.loads(row[6]),
+        )
 
     def export_json(self, run_id: str) -> dict[str, object]:
         """Export one run in a stable JSON-compatible structure."""
         with self._connect() as connection:
             run = connection.execute(
-                "SELECT id, case_id, status, stop_reason FROM runs WHERE id = ?", (run_id,)
+                """
+                SELECT id, case_id, status, stop_reason, functional_success,
+                       review_status, review_reasons
+                FROM runs WHERE id = ?
+                """,
+                (run_id,),
             ).fetchone()
             steps = connection.execute(
                 """
@@ -138,6 +213,9 @@ class TraceStore:
                 "case_id": run[1],
                 "status": run[2],
                 "stop_reason": run[3],
+                "functional_success": None if run[4] is None else bool(run[4]),
+                "review_status": run[5],
+                "review_reasons": json.loads(run[6]),
             },
             "steps": [
                 {

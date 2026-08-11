@@ -55,12 +55,24 @@ def test_json_export_redacts_api_key(store, run_record):
 
 def test_finish_run_records_terminal_status_and_reason(store, run_record):
     store.create_run(run_record)
+    store.start_run(run_record.id)
 
     store.finish_run(run_record.id, RunStatus.SUCCEEDED, "public_tests_passed")
 
     exported = store.export_json(run_record.id)
     assert exported["run"]["status"] == "succeeded"
     assert exported["run"]["stop_reason"] == "public_tests_passed"
+
+
+def test_run_state_must_transition_from_queued_to_running_to_terminal(store, run_record):
+    store.create_run(run_record)
+
+    with pytest.raises(ValueError, match="running run"):
+        store.finish_run(run_record.id, RunStatus.FAILED, "invalid_transition")
+
+    store.start_run(run_record.id)
+    with pytest.raises(ValueError, match="queued run"):
+        store.start_run(run_record.id)
 
 
 def test_json_export_preserves_step_efficiency_metrics(store, run_record):
@@ -87,3 +99,20 @@ def test_json_export_preserves_step_efficiency_metrics(store, run_record):
     assert exported["steps"][0]["input_tokens"] == 30
     assert exported["steps"][0]["output_tokens"] == 12
     assert exported["steps"][0]["cost_usd"] == 0.0004
+
+
+def test_finish_run_redacts_reviewer_reasons(store, run_record):
+    store.create_run(run_record)
+    store.start_run(run_record.id)
+
+    store.finish_run(
+        run_record.id,
+        RunStatus.SUCCEEDED,
+        "functional_success",
+        functional_success=True,
+        review_status="approved",
+        review_reasons=["DEEPSEEK_API_KEY=secret-value"],
+    )
+
+    exported = store.export_json(run_record.id)
+    assert exported["run"]["review_reasons"] == ["[REDACTED]"]

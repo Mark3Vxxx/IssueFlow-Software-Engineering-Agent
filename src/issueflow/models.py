@@ -93,3 +93,7 @@ class RunRecord(BaseModel):
     id: str
     case_id: str
     status: RunStatus = RunStatus.QUEUED
+    stop_reason: str | None = None
+    functional_success: bool | None = None
+    review_status: str | None = None
+    review_reasons: list[str] = Field(default_factory=list)
