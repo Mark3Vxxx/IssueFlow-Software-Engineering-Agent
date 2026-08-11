@@ -1,0 +1,13 @@
+diff --git a/micrograd/engine.py b/micrograd/engine.py
+index afd82cc..38f3bb0 100644
+--- a/micrograd/engine.py
++++ b/micrograd/engine.py
+@@ -46,7 +46,7 @@ class Value:
+         out = Value(0 if self.data < 0 else self.data, (self,), 'ReLU')
+ 
+         def _backward():
+-            self.grad += (out.data > 0) * out.grad
++            self.grad += (out.data >= 0) * out.grad
+         out._backward = _backward
+ 
+         return out

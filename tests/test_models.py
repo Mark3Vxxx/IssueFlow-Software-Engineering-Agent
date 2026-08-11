@@ -56,3 +56,20 @@ def test_new_run_record_starts_queued():
     run = RunRecord(id="run-123", case_id="historical-01")
 
     assert run.status is RunStatus.QUEUED
+
+
+def test_constructed_case_requires_a_fault_patch():
+    with pytest.raises(ValidationError):
+        BenchmarkCase(
+            id="constructed-01",
+            kind="constructed",
+            repository_url="https://github.com/karpathy/micrograd",
+            revision="a" * 40,
+            license="MIT",
+            issue="Unary negation returns a positive value",
+            source_url="https://github.com/karpathy/micrograd",
+            reproduce_command="python -m pytest",
+            verify_command="python -m pytest",
+            reference_patch="patches/constructed-01-fix.patch",
+            construction_notes="A controlled regression case.",
+        )

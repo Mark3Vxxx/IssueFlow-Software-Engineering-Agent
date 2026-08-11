@@ -1,0 +1,13 @@
+diff --git b/micrograd/engine.py a/micrograd/engine.py
+index 54e0696..afd82cc 100644
+--- b/micrograd/engine.py
++++ a/micrograd/engine.py
+@@ -37,7 +37,7 @@ class Value:
+         out = Value(self.data**other, (self,), f'**{other}')
+ 
+         def _backward():
+-            self.grad += self.data**(other-1) * out.grad
++            self.grad += (other * self.data**(other-1)) * out.grad
+         out._backward = _backward
+ 
+         return out

@@ -158,9 +158,9 @@ Expected: FAIL，目录读取器尚未实现。
 
 - [ ] **Step 3: 实现目录、版本固定和样本验证**
 
-使用 40 位 SHA 正则验证 `revision`，解析 YAML。每个样本必须包含：`id`、`kind`、`repository_url`、`revision`、`license`、`issue`、`source_url`、`reproduce_command`、`verify_command`、`reference_patch`、`construction_notes`。
+使用 40 位 SHA 正则验证 `revision`，解析 YAML。每个样本必须包含：`id`、`kind`、`repository_url`、`revision`、`license`、`issue`、`source_url`、`reproduce_command`、`verify_command`、`reference_patch`、`construction_notes`。每个 `constructed` 样本还必须包含 `fault_patch`；`historical` 样本不得包含该字段。
 
-`verify_benchmarks.py` 对每个样本克隆仓库、检出故障 SHA、运行复现命令并要求非零退出；应用完整 `reference_patch` 后运行验证命令并要求零退出。清单中的样本 ID 固定为 `historical-01`、`constructed-01`、`constructed-02`、`constructed-03`、`constructed-04`。唯一历史样本的来源必须是修复提交链接；四个自建样本必须明确注入的断言与构造理由。
+`verify_benchmarks.py` 对每个样本克隆仓库、检出故障 SHA；如果定义了 `fault_patch`，先将其应用到工作区；然后运行复现命令并要求非零退出，应用完整 `reference_patch` 后运行验证命令并要求零退出。清单中的样本 ID 固定为 `historical-01`、`constructed-01`、`constructed-02`、`constructed-03`、`constructed-04`。唯一历史样本的来源必须是修复提交链接；四个自建样本必须明确注入的断言与构造理由。
 
 - [ ] **Step 4: 验证目录和样本**
 

@@ -1,0 +1,13 @@
+diff --git b/micrograd/engine.py a/micrograd/engine.py
+index 8d0e1b2..afd82cc 100644
+--- b/micrograd/engine.py
++++ a/micrograd/engine.py
+@@ -70,7 +70,7 @@ class Value:
+             v._backward()
+ 
+     def __neg__(self): # -self
+-        return self
++        return self * -1
+ 
+     def __radd__(self, other): # other + self
+         return self + other

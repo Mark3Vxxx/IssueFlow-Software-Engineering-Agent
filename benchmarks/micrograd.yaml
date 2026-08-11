@@ -1,0 +1,62 @@
+cases:
+  - id: historical-01
+    kind: historical
+    repository_url: https://github.com/karpathy/micrograd
+    revision: 36fab1a79ec47fd19fe2a90dcea772d58bfea072
+    license: MIT
+    issue: Shared computation graphs leave root gradients at zero during backward propagation.
+    source_url: https://github.com/karpathy/micrograd/commit/9fd9cc02fe5a0e57d790b03572f0d7bcd990662d
+    reproduce_command: >-
+      python -c "from micrograd.engine import Value; a = Value(2.0); shared = a * a; output = shared + shared; output.backward(); assert a.grad == 8.0, a.grad"
+    verify_command: >-
+      python -c "from micrograd.engine import Value; a = Value(2.0); shared = a * a; output = shared + shared; output.backward(); assert a.grad == 8.0, a.grad"
+    reference_patch: patches/historical-01-fix.patch
+    construction_notes: Historical code repair from commit 9fd9cc0; the reproduction uses a public shared-graph regression assertion.
+  - id: constructed-01
+    kind: constructed
+    repository_url: https://github.com/karpathy/micrograd
+    revision: 7bc720e951fe422b8f8814aa5aa1b64121d26b4c
+    license: MIT
+    issue: Unary negation returns the original positive value instead of its additive inverse.
+    source_url: https://github.com/karpathy/micrograd/blob/7bc720e951fe422b8f8814aa5aa1b64121d26b4c/micrograd/engine.py
+    reproduce_command: python -c "from micrograd.engine import Value; assert (-Value(2.0)).data == -2.0"
+    verify_command: python -c "from micrograd.engine import Value; assert (-Value(2.0)).data == -2.0"
+    fault_patch: patches/constructed-01-fault.patch
+    reference_patch: patches/constructed-01-fix.patch
+    construction_notes: Changes only Value.__neg__; it models a one-line arithmetic regression with an observable result.
+  - id: constructed-02
+    kind: constructed
+    repository_url: https://github.com/karpathy/micrograd
+    revision: 7bc720e951fe422b8f8814aa5aa1b64121d26b4c
+    license: MIT
+    issue: Power backward propagation omits the exponent multiplier.
+    source_url: https://github.com/karpathy/micrograd/blob/7bc720e951fe422b8f8814aa5aa1b64121d26b4c/micrograd/engine.py
+    reproduce_command: python -c "from micrograd.engine import Value; x = Value(3.0); (x ** 3).backward(); assert x.grad == 27.0, x.grad"
+    verify_command: python -c "from micrograd.engine import Value; x = Value(3.0); (x ** 3).backward(); assert x.grad == 27.0, x.grad"
+    fault_patch: patches/constructed-02-fault.patch
+    reference_patch: patches/constructed-02-fix.patch
+    construction_notes: Removes only the local derivative multiplier in Value.__pow__.
+  - id: constructed-03
+    kind: constructed
+    repository_url: https://github.com/karpathy/micrograd
+    revision: 7bc720e951fe422b8f8814aa5aa1b64121d26b4c
+    license: MIT
+    issue: ReLU incorrectly propagates a gradient at the zero boundary.
+    source_url: https://github.com/karpathy/micrograd/blob/7bc720e951fe422b8f8814aa5aa1b64121d26b4c/micrograd/engine.py
+    reproduce_command: python -c "from micrograd.engine import Value; x = Value(0.0); x.relu().backward(); assert x.grad == 0.0, x.grad"
+    verify_command: python -c "from micrograd.engine import Value; x = Value(0.0); x.relu().backward(); assert x.grad == 0.0, x.grad"
+    fault_patch: patches/constructed-03-fault.patch
+    reference_patch: patches/constructed-03-fix.patch
+    construction_notes: Changes the ReLU boundary predicate only; no unrelated operator is modified.
+  - id: constructed-04
+    kind: constructed
+    repository_url: https://github.com/karpathy/micrograd
+    revision: 7bc720e951fe422b8f8814aa5aa1b64121d26b4c
+    license: MIT
+    issue: Division multiplies by the divisor instead of its reciprocal.
+    source_url: https://github.com/karpathy/micrograd/blob/7bc720e951fe422b8f8814aa5aa1b64121d26b4c/micrograd/engine.py
+    reproduce_command: python -c "from micrograd.engine import Value; assert (Value(6.0) / 2.0).data == 3.0"
+    verify_command: python -c "from micrograd.engine import Value; assert (Value(6.0) / 2.0).data == 3.0"
+    fault_patch: patches/constructed-04-fault.patch
+    reference_patch: patches/constructed-04-fix.patch
+    construction_notes: Changes only the exponent used by Value.__truediv__.

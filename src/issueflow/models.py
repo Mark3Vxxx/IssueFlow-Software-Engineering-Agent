@@ -3,7 +3,7 @@
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field, PositiveFloat, PositiveInt
+from pydantic import BaseModel, Field, PositiveFloat, PositiveInt, model_validator
 
 
 class RunStatus(StrEnum):
@@ -52,6 +52,16 @@ class BenchmarkCase(BaseModel):
     verify_command: str
     reference_patch: str
     construction_notes: str
+    fault_patch: str | None = None
+
+    @model_validator(mode="after")
+    def validate_sample_provenance(self) -> "BenchmarkCase":
+        """Require an explicit fault source for every constructed sample."""
+        if self.kind == "constructed" and not self.fault_patch:
+            raise ValueError("constructed cases require fault_patch")
+        if self.kind == "historical" and self.fault_patch:
+            raise ValueError("historical cases must not define fault_patch")
+        return self
 
 
 class TraceStep(BaseModel):
