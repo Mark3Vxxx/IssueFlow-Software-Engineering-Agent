@@ -16,7 +16,7 @@
 - API Key 仅从 `DEEPSEEK_API_KEY` 读取，不能写入 SQLite、JSON、日志、截图或 Git。
 - MVP 只实现 `single_agent`；轨迹保留可扩展的 `role` 与 `step_type` 字段。
 - 功能成功条件：复现失败、生成非空补丁、公开验证通过、未超预算；LLM Reviewer 仅作补充展示。
-- 样本固定为 3 个 `historical` 和 2 个 `constructed`，必须在 UI 和报告中区分。
+- 样本固定为 1 个 `historical` 和 4 个 `constructed`，必须在 UI 和报告中区分；不得将构造样本表述为历史 Issue 修复。
 
 ---
 
@@ -138,10 +138,10 @@ git commit -m "chore: initialize IssueFlow MVP"
 - [ ] **Step 1: 写失败测试**
 
 ```python
-def test_catalog_requires_three_historical_and_two_constructed(tmp_path):
+def test_catalog_requires_one_historical_and_four_constructed(tmp_path):
     path = tmp_path / "cases.yaml"
     path.write_text("cases: []", encoding="utf-8")
-    with pytest.raises(ValueError, match="3 historical and 2 constructed"):
+    with pytest.raises(ValueError, match="1 historical and 4 constructed"):
         load_catalog(path)
 
 def test_case_requires_full_git_sha():
@@ -160,7 +160,7 @@ Expected: FAIL，目录读取器尚未实现。
 
 使用 40 位 SHA 正则验证 `revision`，解析 YAML。每个样本必须包含：`id`、`kind`、`repository_url`、`revision`、`license`、`issue`、`source_url`、`reproduce_command`、`verify_command`、`reference_patch`、`construction_notes`。
 
-`verify_benchmarks.py` 对每个样本克隆仓库、检出故障 SHA、运行复现命令并要求非零退出；应用完整 `reference_patch` 后运行验证命令并要求零退出。清单中的样本 ID 固定为 `historical-01`、`historical-02`、`historical-03`、`constructed-01`、`constructed-02`。三个历史样本的来源必须是 Issue 或修复提交链接；两个自建样本必须明确注入的断言与构造理由。
+`verify_benchmarks.py` 对每个样本克隆仓库、检出故障 SHA、运行复现命令并要求非零退出；应用完整 `reference_patch` 后运行验证命令并要求零退出。清单中的样本 ID 固定为 `historical-01`、`constructed-01`、`constructed-02`、`constructed-03`、`constructed-04`。唯一历史样本的来源必须是修复提交链接；四个自建样本必须明确注入的断言与构造理由。
 
 - [ ] **Step 4: 验证目录和样本**
 
@@ -474,6 +474,6 @@ git commit -m "docs: document reproducible IssueFlow phase one MVP"
 
 ## Plan Self-Review
 
-- **Spec coverage:** Task 1 定义配置与预算；Task 2 覆盖样本、来源、许可证和固定版本；Task 3 覆盖 SQLite/JSON 轨迹；Task 4 覆盖默认断网 Docker；Task 5 覆盖 DeepSeek 单 Agent 受限工具；Task 6 覆盖成功判定与审查；Task 7 交付 Streamlit Demo；Task 8 覆盖复现、双语材料与演示。
+- **Spec coverage:** Task 1 定义配置与预算；Task 2 覆盖 1 个历史样本、4 个自建样本、来源、许可证和固定版本；Task 3 覆盖 SQLite/JSON 轨迹；Task 4 覆盖默认断网 Docker；Task 5 覆盖 DeepSeek 单 Agent 受限工具；Task 6 覆盖成功判定与审查；Task 7 交付 Streamlit Demo；Task 8 覆盖复现、双语材料与演示。
 - **Scope:** 未引入多 Agent、Supervisor、任意仓库、自动 PR、隐藏测试、异步服务或分布式执行器。
 - **Consistency:** 运行入口统一使用 `BenchmarkCase`、`Budget`、`TraceStore`、`Sandbox` 与 `RunService`；成功判定只在 Task 6 定义，后续任务只消费该结果。
