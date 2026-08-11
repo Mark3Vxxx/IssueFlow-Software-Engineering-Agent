@@ -1,0 +1,8 @@
+.worktrees/
+.DS_Store
+.env
+.issueflow/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.py[cod]
