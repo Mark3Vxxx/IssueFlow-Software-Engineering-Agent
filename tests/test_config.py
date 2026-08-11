@@ -6,6 +6,6 @@ def test_settings_uses_default_model_and_redacts_api_key(monkeypatch):
 
     settings = Settings.from_env()
 
-    assert settings.model == "deepseek-chat"
+    assert settings.model == "deepseek-v4-flash"
     assert "secret-value" not in settings.safe_dict().values()
     assert settings.safe_dict()["base_url"] == "https://api.deepseek.com"

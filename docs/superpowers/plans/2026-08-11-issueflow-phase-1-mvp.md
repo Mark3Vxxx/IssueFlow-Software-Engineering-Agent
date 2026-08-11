@@ -70,7 +70,7 @@ issueflow/
 def test_settings_redacts_key(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "secret-value")
     settings = Settings.from_env()
-    assert settings.model == "deepseek-chat"
+    assert settings.model == "deepseek-v4-flash"
     assert "secret-value" not in settings.safe_dict().values()
 
 def test_budget_rejects_zero_limit():
@@ -98,18 +98,18 @@ class Budget(BaseModel):
 
 class Settings(BaseModel):
     api_key: SecretStr
-    model: str = "deepseek-chat"
+    model: str = "deepseek-v4-flash"
 
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(api_key=SecretStr(os.environ["DEEPSEEK_API_KEY"]),
-                   model=os.getenv("ISSUEFLOW_MODEL", "deepseek-chat"))
+                   model=os.getenv("ISSUEFLOW_MODEL", "deepseek-v4-flash"))
 
     def safe_dict(self) -> dict[str, str]:
         return {"model": self.model}
 ```
 
-在 `pyproject.toml` 配置 `src` 布局、pytest、ruff、streamlit、pydantic 和 httpx；Makefile 提供 `test`、`lint`、`demo`、`docker-build`；`.env.example` 只列变量名。
+在 `pyproject.toml` 配置 `src` 布局、pytest、ruff、streamlit、pydantic 和 httpx；Makefile 提供 `test`、`lint`、`demo`、`docker-build`；`.env.example` 只列变量名，并以 `deepseek-v4-flash` 作为默认模型。
 
 - [ ] **Step 4: 验证**
 

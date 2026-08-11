@@ -1,4 +1,6 @@
-from issueflow.sandbox import build_docker_command
+from subprocess import CompletedProcess, TimeoutExpired
+
+from issueflow.sandbox import DockerSandbox, build_docker_command
 
 
 def test_docker_command_is_network_isolated_and_resource_limited(tmp_path):
@@ -54,3 +56,35 @@ def test_docker_image_has_the_test_runtime():
         check=False,
     )
     assert runtime.returncode == 0, runtime.stderr
+
+
+def test_docker_sandbox_returns_process_result(monkeypatch, tmp_path):
+    captured: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["timeout"] = kwargs["timeout"]
+        return CompletedProcess(command, 0, stdout="2 passed\n", stderr="")
+
+    monkeypatch.setattr("issueflow.sandbox.subprocess.run", fake_run)
+
+    result = DockerSandbox().run(tmp_path, "python -m pytest", timeout_seconds=30)
+
+    assert "--network" in captured["command"]
+    assert captured["timeout"] == 30
+    assert result.returncode == 0
+    assert result.output == "2 passed"
+    assert result.timed_out is False
+
+
+def test_docker_sandbox_normalizes_timeout(monkeypatch, tmp_path):
+    def fake_run(command, **kwargs):
+        raise TimeoutExpired(command, kwargs["timeout"], output="partial output")
+
+    monkeypatch.setattr("issueflow.sandbox.subprocess.run", fake_run)
+
+    result = DockerSandbox().run(tmp_path, "python -m pytest", timeout_seconds=1)
+
+    assert result.returncode == 124
+    assert result.output == "partial output"
+    assert result.timed_out is True

@@ -9,7 +9,7 @@ class Settings(BaseModel):
     """Configuration loaded from process environment variables."""
 
     api_key: SecretStr
-    model: str = "deepseek-chat"
+    model: str = "deepseek-v4-flash"
     base_url: str = "https://api.deepseek.com"
 
     @classmethod
@@ -17,7 +17,7 @@ class Settings(BaseModel):
         """Load the model connection details without persisting the API key."""
         return cls(
             api_key=SecretStr(os.environ["DEEPSEEK_API_KEY"]),
-            model=os.getenv("ISSUEFLOW_MODEL", "deepseek-chat"),
+            model=os.getenv("ISSUEFLOW_MODEL", "deepseek-v4-flash"),
             base_url=os.getenv("ISSUEFLOW_BASE_URL", "https://api.deepseek.com"),
         )
 
