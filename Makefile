@@ -1,9 +1,12 @@
 PYTHON := .venv/bin/python
 
-.PHONY: test lint demo docker-build verify-benchmarks
+.PHONY: test test-ui lint demo docker-build verify-benchmarks
 
 test:
 	$(PYTHON) -m pytest
+
+test-ui:
+	$(PYTHON) -m pytest tests/test_ui.py -q
 
 lint:
 	$(PYTHON) -m ruff check src tests
