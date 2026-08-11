@@ -3,7 +3,15 @@
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field, PositiveFloat, PositiveInt, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    NonNegativeFloat,
+    NonNegativeInt,
+    PositiveFloat,
+    PositiveInt,
+    model_validator,
+)
 
 
 class RunStatus(StrEnum):
@@ -73,6 +81,10 @@ class TraceStep(BaseModel):
     input_summary: str
     output_summary: str
     status: str
+    duration_ms: NonNegativeInt = 0
+    input_tokens: NonNegativeInt = 0
+    output_tokens: NonNegativeInt = 0
+    cost_usd: NonNegativeFloat = 0.0
 
 
 class RunRecord(BaseModel):
