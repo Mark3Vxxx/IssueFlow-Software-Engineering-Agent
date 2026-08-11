@@ -1,6 +1,7 @@
 .worktrees/
 .DS_Store
 .env
+.venv/
 .issueflow/
 __pycache__/
 .pytest_cache/
