@@ -1,12 +1,15 @@
 PYTHON := .venv/bin/python
 
-.PHONY: test test-ui lint demo docker-build verify-benchmarks
+.PHONY: test test-ui test-e2e lint demo docker-build verify-benchmarks verify-phase-1
 
 test:
 	$(PYTHON) -m pytest
 
 test-ui:
 	$(PYTHON) -m pytest tests/test_ui.py -q
+
+test-e2e:
+	$(PYTHON) -m pytest tests/test_e2e_smoke.py -q
 
 lint:
 	$(PYTHON) -m ruff check src tests
@@ -20,3 +23,9 @@ docker-build:
 
 verify-benchmarks:
 	$(PYTHON) scripts/verify_benchmarks.py --catalog benchmarks/micrograd.yaml
+
+verify-phase-1:
+	$(MAKE) lint
+	$(MAKE) docker-build
+	$(MAKE) test
+	$(MAKE) verify-benchmarks
