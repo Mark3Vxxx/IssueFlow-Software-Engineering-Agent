@@ -86,3 +86,77 @@ def test_deepseek_client_parses_a_final_message_without_tool_call():
 
     assert action.tool is None
     assert action.message == "The repair is complete."
+
+
+def test_deepseek_client_serializes_multiple_tool_calls_one_at_a_time():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": "Inspect likely locations.",
+                            "tool_calls": [
+                                {
+                                    "id": "call_1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "search",
+                                        "arguments": '{"query":"additive"}',
+                                    },
+                                },
+                                {
+                                    "id": "call_2",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "search",
+                                        "arguments": '{"query":"inverse"}',
+                                    },
+                                },
+                            ],
+                        }
+                    }
+                ],
+                "usage": {"prompt_tokens": 20, "completion_tokens": 10},
+            },
+        )
+
+    client = DeepSeekModelClient(
+        api_key="test-key",
+        model="deepseek-v4-flash",
+        base_url="https://api.deepseek.com",
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    action = client.next_action("Negation is broken", history=[])
+
+    assert action.tool == "search"
+    assert action.arguments == {"query": "additive"}
+
+
+def test_deepseek_client_publishes_structured_patch_schema():
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        apply_patch_tool = next(
+            tool for tool in payload["tools"] if tool["function"]["name"] == "apply_patch"
+        )
+        parameters = apply_patch_tool["function"]["parameters"]
+        assert parameters["required"] == ["path", "old_text", "new_text"]
+        assert set(parameters["properties"]) == {"path", "old_text", "new_text"}
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": "No edit required."}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 4},
+            },
+        )
+
+    client = DeepSeekModelClient(
+        api_key="test-key",
+        model="deepseek-v4-flash",
+        base_url="https://api.deepseek.com",
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    client.next_action("Negation is broken", history=[])

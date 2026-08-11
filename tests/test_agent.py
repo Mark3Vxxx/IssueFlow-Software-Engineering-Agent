@@ -346,3 +346,88 @@ def test_agent_rejects_model_finish_without_verification(tmp_path):
     assert result.status is RunStatus.FAILED
     assert result.stop_reason == "model_finished_without_verification"
     assert result.final_message == "Done"
+
+
+def test_apply_patch_accepts_model_update_file_envelope(tmp_path):
+    target = tmp_path / "micrograd" / "engine.py"
+    target.parent.mkdir()
+    target.write_text(
+        "class Value:\n\n    def __neg__(self): # -self\n        return self\n",
+        encoding="utf-8",
+    )
+    tools = ToolExecutor(tmp_path, make_case(), None)
+    model_patch = """*** Begin Patch
+*** Update File: micrograd/engine.py
+@@
+     def __neg__(self): # -self
+-        return self
++        return self * -1
+*** End Patch
+"""
+
+    output = tools.execute(ModelAction(tool="apply_patch", arguments={"patch": model_patch}))
+
+    assert output == "patch applied"
+    assert "return self * -1" in target.read_text(encoding="utf-8")
+
+
+def test_model_update_file_envelope_rejects_workspace_traversal(tmp_path):
+    tools = ToolExecutor(tmp_path, make_case(), None)
+    model_patch = """*** Begin Patch
+*** Update File: ../secret.txt
+@@
+-secret
++exposed
+*** End Patch
+"""
+
+    with pytest.raises(ValueError, match="path must stay inside workspace"):
+        tools.execute(ModelAction(tool="apply_patch", arguments={"patch": model_patch}))
+
+
+def structured_patch(path: str, old_text: str, new_text: str) -> ModelAction:
+    return ModelAction(
+        tool="apply_patch",
+        arguments={"path": path, "old_text": old_text, "new_text": new_text},
+    )
+
+
+def test_structured_patch_replaces_exactly_one_match(tmp_path):
+    target = tmp_path / "micrograd" / "engine.py"
+    target.parent.mkdir()
+    target.write_text("def negate():\n    return self\n", encoding="utf-8")
+    tools = ToolExecutor(tmp_path, make_case(), None)
+
+    output = tools.execute(
+        structured_patch(
+            "micrograd/engine.py",
+            "    return self\n",
+            "    return self * -1\n",
+        )
+    )
+
+    assert output == "patch applied"
+    assert target.read_text(encoding="utf-8") == "def negate():\n    return self * -1\n"
+
+
+def test_structured_patch_rejects_zero_matches(tmp_path):
+    (tmp_path / "engine.py").write_text("return self\n", encoding="utf-8")
+    tools = ToolExecutor(tmp_path, make_case(), None)
+
+    with pytest.raises(ValueError, match="old_text must match exactly once: found 0"):
+        tools.execute(structured_patch("engine.py", "missing\n", "replacement\n"))
+
+
+def test_structured_patch_rejects_multiple_matches(tmp_path):
+    (tmp_path / "engine.py").write_text("same\nsame\n", encoding="utf-8")
+    tools = ToolExecutor(tmp_path, make_case(), None)
+
+    with pytest.raises(ValueError, match="old_text must match exactly once: found 2"):
+        tools.execute(structured_patch("engine.py", "same\n", "changed\n"))
+
+
+def test_structured_patch_rejects_workspace_traversal(tmp_path):
+    tools = ToolExecutor(tmp_path, make_case(), None)
+
+    with pytest.raises(ValueError, match="path must stay inside workspace"):
+        tools.execute(structured_patch("../secret.txt", "secret", "exposed"))

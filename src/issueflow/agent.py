@@ -18,7 +18,7 @@ ALLOWED_TOOLS = frozenset({"search", "read_file", "apply_patch", "run_tests"})
 TOOL_ARGUMENTS = {
     "search": frozenset({"query"}),
     "read_file": frozenset({"path", "start_line", "end_line"}),
-    "apply_patch": frozenset({"patch"}),
+    "apply_patch": frozenset({"path", "old_text", "new_text", "patch"}),
     "run_tests": frozenset({"command"}),
 }
 
@@ -57,11 +57,27 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "apply_patch",
-            "description": "Apply one unified diff whose paths stay inside the workspace.",
+            "description": (
+                "Replace exactly one known text fragment in a workspace file. Copy old_text "
+                "verbatim from read_file output, excluding its displayed line-number prefix."
+            ),
             "parameters": {
                 "type": "object",
-                "properties": {"patch": {"type": "string"}},
-                "required": ["patch"],
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path of the existing workspace file.",
+                    },
+                    "old_text": {
+                        "type": "string",
+                        "description": "Exact non-empty text currently present exactly once.",
+                    },
+                    "new_text": {
+                        "type": "string",
+                        "description": "Replacement text, including intended indentation.",
+                    },
+                },
+                "required": ["path", "old_text", "new_text"],
                 "additionalProperties": False,
             },
         },
@@ -180,8 +196,6 @@ class DeepSeekModelClient:
                 output_tokens=output_tokens,
                 cost_usd=cost_usd,
             )
-        if len(tool_calls) != 1:
-            raise ValueError("model must request exactly one tool at a time")
         function = tool_calls[0]["function"]
         arguments = json.loads(function["arguments"])
         if not isinstance(arguments, dict):
@@ -283,9 +297,21 @@ class ToolExecutor:
                 for line_number, line in enumerate(selected, start=start_line)
             )
         if action.tool == "apply_patch":
+            if "patch" not in action.arguments:
+                self._apply_structured_patch(
+                    action.arguments.get("path"),
+                    action.arguments.get("old_text"),
+                    action.arguments.get("new_text"),
+                )
+                return "patch applied"
+            if set(action.arguments) != {"patch"}:
+                raise ValueError("apply_patch accepts either structured fields or patch")
             patch = action.arguments.get("patch")
             if not isinstance(patch, str) or not patch.strip():
                 raise ValueError("apply_patch requires a non-empty patch")
+            if patch.startswith("*** Begin Patch\n"):
+                self._apply_update_file_envelope(patch)
+                return "patch applied"
             self._validate_patch_paths(patch)
             completed = subprocess.run(
                 ["git", "apply", "--whitespace=nowarn", "-"],
@@ -313,6 +339,19 @@ class ToolExecutor:
             return f"exit_code={result.returncode}\n{result.output}".rstrip()
         raise NotImplementedError(f"tool is not implemented: {action.tool}")
 
+    def _apply_structured_patch(
+        self, path_value: object, old_value: object, new_value: object
+    ) -> None:
+        """Replace one exact text occurrence inside a workspace file."""
+        path = self._resolve_workspace_path(path_value)
+        if not isinstance(old_value, str) or not old_value or not isinstance(new_value, str):
+            raise ValueError("structured patch requires path, old_text, and new_text")
+        original = path.read_text(encoding="utf-8")
+        matches = original.count(old_value)
+        if matches != 1:
+            raise ValueError(f"old_text must match exactly once: found {matches}")
+        path.write_text(original.replace(old_value, new_value, 1), encoding="utf-8")
+
     def _resolve_workspace_path(self, value: object) -> Path:
         """Resolve a relative path without allowing traversal or symlink escape."""
         if not isinstance(value, str) or not value or Path(value).is_absolute():
@@ -339,6 +378,68 @@ class ToolExecutor:
             paths_found += 1
         if paths_found == 0:
             raise ValueError("patch must include workspace file headers")
+
+    def _apply_update_file_envelope(self, patch: str) -> None:
+        """Apply the model's context patch format without executing arbitrary commands."""
+        lines = patch.splitlines()
+        if not lines or lines[0] != "*** Begin Patch" or lines[-1] != "*** End Patch":
+            raise ValueError("invalid model patch envelope")
+
+        pending_writes: dict[Path, str] = {}
+        index = 1
+        while index < len(lines) - 1:
+            header = lines[index]
+            prefix = "*** Update File: "
+            if not header.startswith(prefix):
+                raise ValueError("model patch supports only Update File sections")
+            path = self._resolve_workspace_path(header.removeprefix(prefix))
+            index += 1
+            hunks: list[list[str]] = []
+            current_hunk: list[str] = []
+            while index < len(lines) - 1 and not lines[index].startswith("*** Update File: "):
+                line = lines[index]
+                if line.startswith("*** "):
+                    raise ValueError("unsupported model patch section")
+                if line.startswith("@@"):
+                    if current_hunk:
+                        hunks.append(current_hunk)
+                        current_hunk = []
+                elif line and line[0] in {" ", "+", "-"}:
+                    current_hunk.append(line)
+                else:
+                    raise ValueError("invalid model patch hunk")
+                index += 1
+            if current_hunk:
+                hunks.append(current_hunk)
+            if not hunks:
+                raise ValueError("model patch requires at least one hunk")
+
+            original = pending_writes.get(path, path.read_text(encoding="utf-8"))
+            keep_trailing_newline = original.endswith("\n")
+            file_lines = original.splitlines()
+            for hunk in hunks:
+                old_lines = [line[1:] for line in hunk if line[0] in {" ", "-"}]
+                new_lines = [line[1:] for line in hunk if line[0] in {" ", "+"}]
+                if not old_lines:
+                    raise ValueError("model patch hunk requires existing context")
+                matches = [
+                    start
+                    for start in range(len(file_lines) - len(old_lines) + 1)
+                    if file_lines[start : start + len(old_lines)] == old_lines
+                ]
+                if len(matches) != 1:
+                    raise ValueError("model patch context must match exactly once")
+                start = matches[0]
+                file_lines[start : start + len(old_lines)] = new_lines
+            updated = "\n".join(file_lines)
+            if keep_trailing_newline:
+                updated += "\n"
+            pending_writes[path] = updated
+
+        if not pending_writes:
+            raise ValueError("model patch contains no file updates")
+        for path, updated in pending_writes.items():
+            path.write_text(updated, encoding="utf-8")
 
 
 class SingleAgent:
