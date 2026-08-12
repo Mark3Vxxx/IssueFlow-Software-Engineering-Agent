@@ -422,6 +422,25 @@ def test_dynamic_preserves_usage_from_malformed_supervisor_decision(case, tmp_pa
     assert all(script.calls == 0 for script in scripts.values())
 
 
+def test_dynamic_trace_usage_matches_validated_role_delta(case, tmp_path, budget):
+    role_usage = Usage(
+        model_calls=1,
+        tool_calls=2,
+        input_tokens=31,
+        output_tokens=7,
+        cost_usd=0.02,
+    )
+    roles, _ = scripted_roles(planner_usage=role_usage)
+    supervisor = ScriptedSupervisor(["planner", "retriever", "coder", "reviewer", "stop"])
+
+    result = run_dynamic(supervisor, roles, case, tmp_path, budget)
+
+    planner_step = next(step for step in result.steps if step.role == RoleName.PLANNER)
+    assert planner_step.input_tokens == role_usage.input_tokens
+    assert planner_step.output_tokens == role_usage.output_tokens
+    assert planner_step.cost_usd == role_usage.cost_usd
+
+
 class Sandbox:
     def run(self, workspace, command, timeout_seconds):
         raise AssertionError("invalid execution context must not reach the sandbox")

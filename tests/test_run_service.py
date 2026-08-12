@@ -236,8 +236,9 @@ def test_invalid_parsed_review_persists_usage_without_overriding_success(tmp_pat
 
     result = service.start(case.id, make_budget())
 
-    assert result.status is RunStatus.SUCCEEDED
-    assert result.functional_success is True
+    assert result.status is RunStatus.BUDGET_EXHAUSTED
+    assert result.functional_success is False
+    assert result.stop_reason == "cost_budget_exhausted"
     assert result.review_status == "failed"
     assert result.review_reasons == ["invalid_reviewer_response"]
     exported = store.export_json(result.id)
@@ -248,11 +249,87 @@ def test_invalid_parsed_review_persists_usage_without_overriding_success(tmp_pat
     assert review_step["input_tokens"] == 19
     assert review_step["output_tokens"] == 3
     assert review_step["cost_usd"] == 0.25
-    assert sum(step["duration_ms"] for step in exported["steps"]) == 27
-    assert sum(step["input_tokens"] for step in exported["steps"]) == 19
-    assert sum(step["output_tokens"] for step in exported["steps"]) == 3
-    assert sum(step["cost_usd"] for step in exported["steps"]) == 0.25
+    assert exported["run"]["usage"] == {
+        "model_calls": 1,
+        "tool_calls": 2,
+        "patch_attempts": 1,
+        "input_tokens": 19,
+        "output_tokens": 3,
+        "cost_usd": 0.25,
+        "duration_ms": 27,
+    }
+    assert exported["run"]["role_usage"]["reviewer"] == usage.model_dump()
     assert "provider-secret-detail" not in store.export_json_text(result.id)
+
+
+def test_run_usage_is_persisted_once_and_includes_outer_reviewer(tmp_path):
+    case = make_case()
+    store = TraceStore(tmp_path / "issueflow.sqlite3")
+    service = RunService(
+        catalog={case.id: case},
+        store=store,
+        workspace_preparer=LocalWorkspacePreparer(tmp_path / "workspaces"),
+        sandbox=SequenceSandbox([1, 0]),
+        architecture_factory=lambda _kind, selected_case, workspace: SingleArchitecture(
+            RepairingAgent()
+        ),
+        reviewer=Reviewer(NeedsChangesModel()),
+    )
+
+    result = service.start(case.id, make_budget())
+    exported = store.export_json(result.id)
+
+    assert result.usage == Usage(
+        model_calls=1,
+        tool_calls=2,
+        patch_attempts=1,
+        input_tokens=37,
+        output_tokens=11,
+        cost_usd=0.00004,
+        duration_ms=10,
+    )
+    assert exported["run"]["usage"] == result.usage.model_dump()
+    assert exported["run"]["role_usage"] == {
+        "single_agent": Usage(tool_calls=2, patch_attempts=1).model_dump(),
+        "reviewer": Usage(
+            model_calls=1,
+            input_tokens=37,
+            output_tokens=11,
+            cost_usd=0.00004,
+        ).model_dump(),
+    }
+
+
+def test_exact_global_time_limit_is_allowed_when_no_advisory_call_remains(tmp_path):
+    case = make_case()
+    store = TraceStore(tmp_path / "issueflow.sqlite3")
+
+    class ExactDurationSandbox(SequenceSandbox):
+        def run(self, workspace, command, timeout_seconds):
+            result = super().run(workspace, command, timeout_seconds)
+            return result.__class__(
+                returncode=result.returncode,
+                output=result.output,
+                timed_out=result.timed_out,
+                duration_ms=500,
+            )
+
+    service = RunService(
+        catalog={case.id: case},
+        store=store,
+        workspace_preparer=LocalWorkspacePreparer(tmp_path / "workspaces"),
+        sandbox=ExactDurationSandbox([1, 0]),
+        architecture_factory=lambda _kind, selected_case, workspace: SingleArchitecture(
+            RepairingAgent()
+        ),
+        reviewer=Reviewer(),
+    )
+
+    result = service.start(case.id, make_budget().model_copy(update={"max_seconds": 1}))
+
+    assert result.status is RunStatus.SUCCEEDED
+    assert result.functional_success is True
+    assert result.usage.duration_ms == 1_000
 
 
 def test_default_and_explicit_architectures_are_persisted_with_the_same_budget(tmp_path):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections import deque
+from dataclasses import dataclass
 from pathlib import Path
 from subprocess import run
 
@@ -23,6 +24,7 @@ from issueflow.architectures.state import (
     RetrievalToolCall,
     ReviewOutput,
 )
+from issueflow.benchmark import load_catalog
 from issueflow.models import BenchmarkCase, Budget, RunStatus, Usage
 from issueflow.reviewer import Reviewer
 from issueflow.run_service import GitWorkspacePreparer, RunService
@@ -38,6 +40,88 @@ SHARED_BUDGET = Budget(
     max_output_tokens=1_000,
     max_cost_usd=0.01,
 )
+
+COMPATIBILITY_CATALOG = Path(__file__).parents[2] / "benchmarks" / "micrograd.yaml"
+COMPATIBILITY_CASES = list(load_catalog(COMPATIBILITY_CATALOG).values())
+
+
+@dataclass(frozen=True)
+class RepairDecision:
+    path: str
+    old_text: str
+    new_text: str
+    line: int
+    diff_fragment: str
+
+
+CASE_REPAIRS = {
+    "historical-01": RepairDecision(
+        path="micrograd/engine.py",
+        old_text="""    def __add__(self, other):
+        other = other if isinstance(other, Value) else Value(other)
+        out = Value(self.data + other.data)
+
+        def backward():
+            self.grad += out.grad
+            other.grad += out.grad
+            self.backward()
+            other.backward()
+        out.backward = backward
+
+        return out
+""",
+        new_text="""    def __add__(self, other):
+        other = other if isinstance(other, Value) else Value(other)
+        out = Value(self.data + other.data)
+
+        def backward():
+            if out.grad == 0:
+                out.grad = 1
+            self.grad += out.grad
+            other.grad += out.grad
+            self.backward()
+            if other is not self:
+                other.backward()
+        out.backward = backward
+
+        return out
+""",
+        line=9,
+        diff_fragment="+            if out.grad == 0:",
+    ),
+    "constructed-01": RepairDecision(
+        path="micrograd/engine.py",
+        old_text="        return self\n",
+        new_text="        return self * -1\n",
+        line=71,
+        diff_fragment="+        return self * -1",
+    ),
+    "constructed-02": RepairDecision(
+        path="micrograd/engine.py",
+        old_text="            self.grad += self.data**(other-1) * out.grad\n",
+        new_text="            self.grad += (other * self.data**(other-1)) * out.grad\n",
+        line=38,
+        diff_fragment="+            self.grad += (other * self.data**(other-1)) * out.grad",
+    ),
+    "constructed-03": RepairDecision(
+        path="micrograd/engine.py",
+        old_text="            self.grad += (out.data >= 0) * out.grad\n",
+        new_text="            self.grad += (out.data > 0) * out.grad\n",
+        line=47,
+        diff_fragment="+            self.grad += (out.data > 0) * out.grad",
+    ),
+    "constructed-04": RepairDecision(
+        path="micrograd/engine.py",
+        old_text="""    def __truediv__(self, other): # self / other
+        return self * other
+""",
+        new_text="""    def __truediv__(self, other): # self / other
+        return self * other**-1
+""",
+        line=84,
+        diff_fragment="+        return self * other**-1",
+    ),
+}
 
 EXPECTED_ARCHITECTURE_STEPS = {
     ArchitectureKind.DIRECT: [("model", "direct"), ("tool", "direct")],
@@ -178,6 +262,119 @@ class ScriptedStructuredModel:
         else:  # pragma: no cover - a new production role must extend this acceptance script.
             raise AssertionError(f"unexpected structured schema: {schema}")
         return StructuredCompletion(value=value, usage=Usage(model_calls=1))
+
+
+class CompatibilitySingleModel:
+    """Apply one literal case decision, then execute the registered public check."""
+
+    def __init__(self, decision: RepairDecision, verify_command: str) -> None:
+        request_usage = {
+            "input_tokens": 3,
+            "output_tokens": 2,
+            "cost_usd": 0.000001,
+        }
+        self.actions = deque(
+            [
+                ModelAction(
+                    tool="apply_patch",
+                    arguments={
+                        "path": decision.path,
+                        "old_text": decision.old_text,
+                        "new_text": decision.new_text,
+                    },
+                    **request_usage,
+                ),
+                ModelAction(
+                    tool="run_tests",
+                    arguments={"command": verify_command},
+                    **request_usage,
+                ),
+            ]
+        )
+
+    def next_action(self, issue: str, history: list[dict[str, object]]) -> ModelAction:
+        del issue, history
+        return self.actions.popleft()
+
+
+class CompatibilityStructuredModel:
+    """Script each structured role from a literal repair decision, never a patch file."""
+
+    def __init__(self, decision: RepairDecision, verify_command: str) -> None:
+        self.decision = decision
+        self.verify_command = verify_command
+
+    def complete(self, system_prompt, payload, schema):
+        del system_prompt
+        if schema is DirectPatch:
+            value = DirectPatch(
+                path=self.decision.path,
+                old_text=self.decision.old_text,
+                new_text=self.decision.new_text,
+                explanation="Apply the case-specific deterministic repair.",
+            )
+        elif schema is PlanOutput:
+            value = PlanOutput(
+                steps=["Apply the case-specific deterministic repair and verify it."],
+                target_files=[self.decision.path],
+                validation_conditions=["The registered compatibility check passes."],
+            )
+        elif schema is EvidenceBundle:
+            value = EvidenceBundle(
+                items=[
+                    EvidenceItem(
+                        path=self.decision.path,
+                        line=self.decision.line,
+                        summary="The compatibility fault is present at this source boundary.",
+                    )
+                ]
+            )
+        elif schema is CoderOutput:
+            value = CoderOutput(
+                current_diff="-faulty compatibility behavior\n+repaired compatibility behavior\n",
+                tool_calls=[
+                    CoderToolCall(
+                        tool="apply_patch",
+                        arguments={
+                            "path": self.decision.path,
+                            "old_text": self.decision.old_text,
+                            "new_text": self.decision.new_text,
+                        },
+                    ),
+                    CoderToolCall(
+                        tool="run_tests",
+                        arguments={"command": self.verify_command},
+                    ),
+                ],
+            )
+        elif schema is ReviewOutput:
+            value = ReviewOutput(status="approved", feedback="The repair is focused.")
+        elif schema is SupervisorDecision:
+            if payload["plan"] is None:
+                next_role = "planner"
+            elif not payload["evidence"]:
+                next_role = "retriever"
+            elif not str(payload["current_diff"]).strip():
+                next_role = "coder"
+            elif payload["review_feedback"] is None:
+                next_role = "reviewer"
+            else:
+                next_role = "stop"
+            value = SupervisorDecision(
+                next_role=next_role,
+                reason=f"scripted compatibility route to {next_role}",
+            )
+        else:  # pragma: no cover - adding a role requires an explicit matrix decision.
+            raise AssertionError(f"unexpected structured schema: {schema}")
+        return StructuredCompletion(
+            value=value,
+            usage=Usage(
+                model_calls=1,
+                input_tokens=3,
+                output_tokens=2,
+                cost_usd=0.000001,
+            ),
+        )
 
 
 class RecordingRunner:
@@ -323,4 +520,81 @@ def test_each_architecture_repairs_through_the_same_real_outer_pipeline(
     )
     exported_text = store.export_json_text(result.id)
     assert json.loads(exported_text) == exported
+    assert store.export_json(result.id) == exported
+
+
+@pytest.mark.parametrize("case", COMPATIBILITY_CASES, ids=lambda item: item.id)
+@pytest.mark.parametrize("architecture", list(ArchitectureKind), ids=lambda item: item.value)
+def test_compatibility_matrix_uses_case_decisions_through_real_git_docker_and_storage(
+    tmp_path: Path,
+    case: BenchmarkCase,
+    architecture: ArchitectureKind,
+):
+    decision = CASE_REPAIRS[case.id]
+    store = TraceStore(tmp_path / "issueflow.sqlite3")
+    sandbox = DockerSandbox()
+    structured_model = CompatibilityStructuredModel(decision, case.verify_command)
+    factory = ArchitectureFactory(
+        single_model_factory=lambda selected_case: CompatibilitySingleModel(
+            CASE_REPAIRS[selected_case.id], selected_case.verify_command
+        ),
+        structured_model=structured_model,
+        sandbox=sandbox,
+    )
+    service = RunService(
+        catalog={case.id: case},
+        store=store,
+        workspace_preparer=GitWorkspacePreparer(
+            tmp_path / "workspaces", COMPATIBILITY_CATALOG.parent
+        ),
+        sandbox=sandbox,
+        architecture_factory=lambda kind, selected_case, workspace: factory.create(
+            kind, selected_case, workspace
+        ),
+        reviewer=Reviewer(),
+    )
+
+    result = service.start(case.id, SHARED_BUDGET, architecture)
+
+    assert result.status is RunStatus.SUCCEEDED
+    assert result.functional_success is True
+    assert result.architecture == architecture.value
+    exported = store.export_json(result.id)
+    assert exported["run"]["case_id"] == case.id
+    assert exported["run"]["architecture"] == architecture.value
+    assert exported["steps"][0]["status"] == "failed_as_expected"
+    verification = next(step for step in exported["steps"] if step["step_type"] == "verification")
+    assert verification["status"] == "passed"
+    diff = next(step for step in exported["steps"] if step["step_type"] == "diff")
+    assert diff["status"] == "completed"
+    assert decision.diff_fragment in diff["output_summary"]
+
+    expected_model_calls = {
+        ArchitectureKind.DIRECT: 1,
+        ArchitectureKind.SINGLE: 2,
+        ArchitectureKind.FIXED: 4,
+        ArchitectureKind.DYNAMIC: 9,
+    }[architecture]
+    expected_tool_calls = 1 if architecture is ArchitectureKind.DIRECT else 2
+    usage = exported["run"]["usage"]
+    assert usage["model_calls"] == expected_model_calls
+    assert usage["tool_calls"] == expected_tool_calls
+    assert usage["patch_attempts"] == 1
+    assert usage["input_tokens"] == expected_model_calls * 3
+    assert usage["output_tokens"] == expected_model_calls * 2
+    assert usage["cost_usd"] == pytest.approx(expected_model_calls * 0.000001)
+    assert usage["duration_ms"] >= sum(
+        step["duration_ms"]
+        for step in exported["steps"]
+        if step["step_type"] in {"reproduction", "verification"}
+    )
+    assert (
+        sum(role["model_calls"] for role in exported["run"]["role_usage"].values())
+        == expected_model_calls
+    )
+    assert (
+        sum(role["tool_calls"] for role in exported["run"]["role_usage"].values())
+        == expected_tool_calls
+    )
+    assert json.loads(store.export_json_text(result.id)) == exported
     assert store.export_json(result.id) == exported

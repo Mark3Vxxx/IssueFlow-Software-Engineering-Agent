@@ -80,10 +80,10 @@ make test                 # 全量测试，包含 Docker 端到端测试
 make test-e2e             # 只验证 Docker/Git/Agent/SQLite/JSON 完整链路
 make verify-benchmarks    # 验证 5 个案例：修复前失败、参考修复后通过
 make verify-phase-1       # 按正确顺序执行阶段一完整验收
-make test-phase-2         # 验证 2A 契约、四种架构、页面与四架构端到端链路
+make test-phase-2         # 验证 2A、单夹具端到端链路与 4×5 兼容矩阵
 ```
 
-执行 `make test`、`make test-e2e` 和 `make verify-phase-1` 时 Docker 必须处于运行状态。`make verify-benchmarks` 还需要联网克隆固定版本的公开仓库。
+执行 `make test`、`make test-e2e`、`make verify-phase-1` 和 `make test-phase-2` 时 Docker 必须处于运行状态。Benchmark 回放与 2A 兼容矩阵还需要联网克隆固定版本的公开仓库。
 
 ## 5 个样本是什么
 
@@ -123,6 +123,6 @@ make test-phase-2         # 验证 2A 契约、四种架构、页面与四架构
 
 ## 已保存证据与当前局限
 
-仓库内的[真实 Agent 轨迹](artifacts/phase-1/constructed-01-live-run.json)来自一次真实 DeepSeek 成功运行：先写入 SQLite，再脱敏导出为 JSON。[阶段一评估记录](docs/phase-1-evaluation.md)会严格区分“参考补丁回放”和“真实 Agent 结果”。
+仓库内的[真实 Agent 轨迹](artifacts/phase-1/constructed-01-live-run.json)来自一次真实 DeepSeek 成功运行：先写入 SQLite，再脱敏导出为 JSON。[阶段一评估记录](docs/phase-1-evaluation.md)会严格区分“参考补丁回放”和“真实 Agent 结果”。阶段 2A 也把三类证据分开：`5/5` 外部参考补丁回放验证目录，`4/4` 四架构单本地夹具验证基础设施，`20/20` 四架构乘五兼容案例矩阵使用逐案例字面脚本决策（不应用参考补丁）验证 Git、Docker、RunService、SQLite 与 JSON 完整链路。
 
 目前它仍是教学型 MVP：阶段 2A 只证明四种架构能在一个小型 Python 仓库与公开验证上走通，还不包含新的严格 Benchmark 或架构对比实验结果。LangGraph checkpoint 仅在内存中，运行仍限于单机和本地 SQLite；真实模型输出与 API 可用性也会影响结果。设计细节与限制见 [2A 架构笔记](docs/phase-2a-architecture-notes.md)。

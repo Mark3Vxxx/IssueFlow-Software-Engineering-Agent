@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from issueflow.agent import ModelAction, ToolExecutor
 from issueflow.architectures.base import RoleName
 from issueflow.architectures.state import (
+    MAX_PUBLIC_TEST_RESULT_CHARS,
     CoderOutput,
     EvidenceBundle,
     EvidenceItem,
@@ -262,7 +263,7 @@ class _ProductionRoles:
                 )
                 break
             if call.tool == "run_tests":
-                public_test_result = observation
+                public_test_result = observation[:MAX_PUBLIC_TEST_RESULT_CHARS]
         update: RoleUpdate = {
             "current_diff": output.current_diff,
             "public_test_result": public_test_result,

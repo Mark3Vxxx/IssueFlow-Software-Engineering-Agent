@@ -5,7 +5,7 @@ import re
 import sqlite3
 from pathlib import Path
 
-from issueflow.models import RunRecord, RunStatus, TraceStep
+from issueflow.models import RunRecord, RunStatus, TraceStep, Usage
 
 _SECRET_PATTERNS = (
     re.compile(r"Authorization:\s*Bearer\s+\S+", re.IGNORECASE),
@@ -43,7 +43,9 @@ class TraceStore:
                     stop_reason TEXT,
                     functional_success INTEGER,
                     review_status TEXT,
-                    review_reasons TEXT NOT NULL DEFAULT '[]'
+                    review_reasons TEXT NOT NULL DEFAULT '[]',
+                    usage TEXT NOT NULL DEFAULT '{}',
+                    role_usage TEXT NOT NULL DEFAULT '{}'
                 );
                 CREATE TABLE IF NOT EXISTS trace_steps (
                     run_id TEXT NOT NULL,
@@ -70,6 +72,8 @@ class TraceStore:
                 "functional_success": "INTEGER",
                 "review_status": "TEXT",
                 "review_reasons": "TEXT NOT NULL DEFAULT '[]'",
+                "usage": "TEXT NOT NULL DEFAULT '{}'",
+                "role_usage": "TEXT NOT NULL DEFAULT '{}'",
             }.items():
                 if name not in columns:
                     connection.execute(f"ALTER TABLE runs ADD COLUMN {name} {definition}")
@@ -90,10 +94,17 @@ class TraceStore:
         with self._connect() as connection:
             connection.execute(
                 """
-                INSERT INTO runs (id, case_id, architecture, status)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO runs (id, case_id, architecture, status, usage, role_usage)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (record.id, record.case_id, record.architecture, record.status.value),
+                (
+                    record.id,
+                    record.case_id,
+                    record.architecture,
+                    record.status.value,
+                    _usage_json(record.usage),
+                    _role_usage_json(record.role_usage),
+                ),
             )
 
     def append_step(self, run_id: str, step: TraceStep) -> None:
@@ -140,6 +151,8 @@ class TraceStore:
         functional_success: bool | None = None,
         review_status: str | None = None,
         review_reasons: list[str] | None = None,
+        usage: Usage | None = None,
+        role_usage: dict[str, Usage] | None = None,
     ) -> None:
         """Record the terminal outcome and its human-readable stopping reason."""
         if not status.is_terminal:
@@ -149,7 +162,7 @@ class TraceStore:
                 """
                 UPDATE runs
                 SET status = ?, stop_reason = ?, functional_success = ?,
-                    review_status = ?, review_reasons = ?
+                    review_status = ?, review_reasons = ?, usage = ?, role_usage = ?
                 WHERE id = ? AND status = ?
                 """,
                 (
@@ -161,6 +174,8 @@ class TraceStore:
                         [redact(reason) for reason in review_reasons or []],
                         ensure_ascii=False,
                     ),
+                    _usage_json(usage or Usage()),
+                    _role_usage_json(role_usage or {}),
                     run_id,
                     RunStatus.RUNNING.value,
                 ),
@@ -174,7 +189,7 @@ class TraceStore:
             row = connection.execute(
                 """
                 SELECT id, case_id, architecture, status, stop_reason, functional_success,
-                       review_status, review_reasons
+                       review_status, review_reasons, usage, role_usage
                 FROM runs WHERE id = ?
                 """,
                 (run_id,),
@@ -190,6 +205,8 @@ class TraceStore:
             functional_success=None if row[5] is None else bool(row[5]),
             review_status=row[6],
             review_reasons=json.loads(row[7]),
+            usage=_load_usage(row[8]),
+            role_usage=_load_role_usage(row[9]),
         )
 
     def export_json(self, run_id: str) -> dict[str, object]:
@@ -198,7 +215,7 @@ class TraceStore:
             run = connection.execute(
                 """
                 SELECT id, case_id, architecture, status, stop_reason, functional_success,
-                       review_status, review_reasons
+                       review_status, review_reasons, usage, role_usage
                 FROM runs WHERE id = ?
                 """,
                 (run_id,),
@@ -223,6 +240,10 @@ class TraceStore:
                 "functional_success": None if run[5] is None else bool(run[5]),
                 "review_status": run[6],
                 "review_reasons": json.loads(run[7]),
+                "usage": _load_usage(run[8]).model_dump(),
+                "role_usage": {
+                    role: usage.model_dump() for role, usage in _load_role_usage(run[9]).items()
+                },
             },
             "steps": [
                 {
@@ -245,3 +266,26 @@ class TraceStore:
     def export_json_text(self, run_id: str) -> str:
         """Serialize an exported trace for file download or archival."""
         return json.dumps(self.export_json(run_id), ensure_ascii=False, sort_keys=True)
+
+
+def _usage_json(usage: Usage) -> str:
+    return json.dumps(usage.model_dump(mode="json"), ensure_ascii=False, sort_keys=True)
+
+
+def _role_usage_json(role_usage: dict[str, Usage]) -> str:
+    return json.dumps(
+        {str(role): usage.model_dump(mode="json") for role, usage in role_usage.items()},
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
+def _load_usage(raw: str) -> Usage:
+    return Usage.model_validate(json.loads(raw or "{}"))
+
+
+def _load_role_usage(raw: str) -> dict[str, Usage]:
+    parsed = json.loads(raw or "{}")
+    if not isinstance(parsed, dict):
+        raise TypeError("role_usage must be a JSON object")
+    return {str(role): Usage.model_validate(usage) for role, usage in parsed.items()}

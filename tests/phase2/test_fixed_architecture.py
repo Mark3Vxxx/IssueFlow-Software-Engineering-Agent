@@ -13,6 +13,7 @@ from issueflow.architectures.fixed import FixedMultiAgentArchitecture
 from issueflow.architectures.roles import RoleSet
 from issueflow.architectures.state import (
     CoderOutput,
+    CoderToolCall,
     EvidenceBundle,
     EvidenceItem,
     PlanOutput,
@@ -383,6 +384,50 @@ def test_production_coder_ignores_unexecuted_model_test_claim(case, tmp_path):
     assert update["public_test_result"] == ""
     assert update["usage"].model_calls == 1
     assert update["usage"].tool_calls == 0
+
+
+def test_public_test_result_is_explicitly_bounded(case, tmp_path):
+    class LargeOutputSandbox:
+        def run(self, workspace, command, timeout_seconds):
+            return SandboxResult(returncode=0, output="x" * 10_000, timed_out=False)
+
+    class TestModel:
+        def complete(self, system_prompt, payload, schema):
+            return StructuredCompletion(
+                value=CoderOutput(
+                    current_diff="-broken\n+fixed\n",
+                    tool_calls=[
+                        CoderToolCall(
+                            tool="run_tests",
+                            arguments={"command": case.verify_command},
+                        )
+                    ],
+                ),
+                usage=Usage(model_calls=1),
+            )
+
+    roles = RoleSet.production(TestModel(), ToolExecutor(tmp_path, case, LargeOutputSandbox()))
+    state = validate_workflow_state(
+        {
+            "case_id": case.id,
+            "issue": case.issue,
+            "plan": PlanOutput(steps=["Test"]),
+            "evidence": [EvidenceItem(path="engine.py", summary="evidence")],
+            "current_diff": "",
+            "public_test_result": "",
+            "review_feedback": None,
+            "usage": Usage(),
+            "role_usage": {},
+            "role_history": [],
+            "rework_count": 0,
+            "route_count": 0,
+            "stop_reason": None,
+        }
+    )
+
+    update, _ = roles.code(state)
+
+    assert len(update["public_test_result"]) == 2_000
 
 
 class ToolHeavyModel:
@@ -862,3 +907,17 @@ def test_fixed_records_each_roles_wall_time_in_shared_usage(case, tmp_path, budg
         RoleName.CODER: 1_000,
         RoleName.REVIEWER: 1_000,
     }
+
+
+def test_fixed_trace_usage_matches_validated_role_delta(case, tmp_path, budget):
+    role_usage = Usage(model_calls=1, tool_calls=2, input_tokens=31, output_tokens=7, cost_usd=0.02)
+    roles, _ = scripted_roles(["approved"], planner_usage=role_usage)
+
+    result = FixedMultiAgentArchitecture(roles=roles).run(
+        case, tmp_path, budget, RunContext(run_id="fixed-trace-usage")
+    )
+
+    planner_step = result.steps[0]
+    assert planner_step.input_tokens == role_usage.input_tokens
+    assert planner_step.output_tokens == role_usage.output_tokens
+    assert planner_step.cost_usd == role_usage.cost_usd

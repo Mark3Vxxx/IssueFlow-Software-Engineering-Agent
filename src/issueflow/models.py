@@ -111,3 +111,5 @@ class RunRecord(BaseModel):
     functional_success: bool | None = None
     review_status: str | None = None
     review_reasons: list[str] = Field(default_factory=list)
+    usage: Usage = Field(default_factory=Usage)
+    role_usage: dict[str, Usage] = Field(default_factory=dict)

@@ -78,10 +78,10 @@ make test                 # full suite, including the Docker end-to-end test
 make test-e2e             # Docker/Git/Agent/SQLite/JSON pipeline only
 make verify-benchmarks    # all five cases fail before and pass after reference fixes
 make verify-phase-1       # complete release check in the required order
-make test-phase-2         # Phase 2A contract, architecture, UI, and four-arm E2E checks
+make test-phase-2         # Phase 2A checks, one-fixture E2E, and 4×5 compatibility matrix
 ```
 
-Docker must be running for `make test`, `make test-e2e`, and `make verify-phase-1`. Benchmark verification also needs internet access to clone the pinned public repository.
+Docker must be running for `make test`, `make test-e2e`, `make verify-phase-1`, and `make test-phase-2`. Benchmark verification and the Phase 2A compatibility matrix also need internet access to clone the pinned public repository.
 
 ## Benchmark provenance
 
@@ -121,6 +121,6 @@ Higher budgets increase available work but never guarantee a successful repair.
 
 ## Evidence and limitations
 
-The checked-in [live Agent trace](artifacts/phase-1/constructed-01-live-run.json) is a credential-safe JSON export from a real DeepSeek run first stored in SQLite. The [evaluation report](docs/phase-1-evaluation.md) separates reference-patch replay from live-Agent results and explains the metrics.
+The checked-in [live Agent trace](artifacts/phase-1/constructed-01-live-run.json) is a credential-safe JSON export from a real DeepSeek run first stored in SQLite. The [evaluation report](docs/phase-1-evaluation.md) separates reference-patch replay from live-Agent results and explains the metrics. Phase 2A likewise separates three kinds of evidence: `5/5` external reference-patch replays validate the catalog, `4/4` architecture runs on one local fixture validate the infrastructure, and a `20/20` four-architecture-by-five-case matrix uses literal scripted decisions—never reference-patch application—to validate the full Git/Docker/RunService/SQLite/JSON wiring.
 
 This is an educational MVP, not a production repair service. Phase 2A proves four-architecture integration on one small Python repository and public checks; it does not yet contain the new strict benchmark or comparative experiment results. LangGraph checkpoints are in memory, runs use one host and local SQLite, model output can vary, and API availability affects live runs. See the [Phase 2A architecture notes](docs/phase-2a-architecture-notes.md) for design details and limitations.

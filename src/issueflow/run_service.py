@@ -12,7 +12,7 @@ from issueflow.architectures.base import (
     ArchitectureRunner,
     RunContext,
 )
-from issueflow.models import BenchmarkCase, Budget, RunRecord, RunStatus, TraceStep
+from issueflow.models import BenchmarkCase, Budget, RunRecord, RunStatus, TraceStep, Usage
 from issueflow.reviewer import Reviewer
 from issueflow.sandbox import SandboxResult
 from issueflow.trace_store import TraceStore
@@ -124,6 +124,28 @@ class RunService:
         )
         self.store.start_run(run_id)
         sequence = 0
+        total_usage = Usage()
+        role_usage: dict[str, Usage] = {}
+
+        def finish(
+            status: RunStatus,
+            stop_reason: str,
+            *,
+            functional_success: bool,
+            review_status: str,
+            review_reasons: list[str],
+        ) -> RunRecord:
+            self.store.finish_run(
+                run_id,
+                status,
+                stop_reason,
+                functional_success=functional_success,
+                review_status=review_status,
+                review_reasons=review_reasons,
+                usage=total_usage,
+                role_usage=role_usage,
+            )
+            return self.store.get_run(run_id)
 
         def append(
             step_type: str,
@@ -160,6 +182,10 @@ class RunService:
             reproduction = self.sandbox.run(
                 workspace, case.reproduce_command, timeout_seconds=budget.max_seconds
             )
+            total_usage = _add_usage(
+                total_usage,
+                Usage(duration_ms=reproduction.duration_ms),
+            )
             append(
                 "reproduction",
                 self._command_output(reproduction),
@@ -168,25 +194,29 @@ class RunService:
                 reproduction.duration_ms,
             )
             if reproduction.timed_out:
-                self.store.finish_run(
-                    run_id,
+                return finish(
                     RunStatus.TIMED_OUT,
                     "reproduction_timed_out",
                     functional_success=False,
                     review_status="skipped",
                     review_reasons=["reproduction_timed_out"],
                 )
-                return self.store.get_run(run_id)
             if reproduction.returncode == 0:
-                self.store.finish_run(
-                    run_id,
+                return finish(
                     RunStatus.FAILED,
                     "reproduction_did_not_fail",
                     functional_success=False,
                     review_status="skipped",
                     review_reasons=["reproduction_did_not_fail"],
                 )
-                return self.store.get_run(run_id)
+            if total_usage.duration_ms >= budget.max_seconds * 1_000:
+                return finish(
+                    RunStatus.TIMED_OUT,
+                    "time_budget_exhausted",
+                    functional_success=False,
+                    review_status="skipped",
+                    review_reasons=["time_budget_exhausted"],
+                )
 
             architecture_result = self.architecture_factory(architecture, case, workspace).run(
                 case,
@@ -201,23 +231,47 @@ class RunService:
                     architecture_step.model_copy(update={"sequence": sequence}),
                 )
 
+            total_usage = _add_usage(total_usage, architecture_result.usage)
+            role_usage = _merge_role_usage(role_usage, architecture_result.role_usage)
+            global_reason = _budget_overrun_reason(total_usage, budget)
+            if global_reason is not None:
+                return finish(
+                    _status_for_budget_reason(global_reason),
+                    global_reason,
+                    functional_success=False,
+                    review_status="skipped",
+                    review_reasons=[global_reason],
+                )
+
             if architecture_result.status in {
                 RunStatus.BUDGET_EXHAUSTED,
                 RunStatus.TIMED_OUT,
                 RunStatus.FAILED,
             }:
-                self.store.finish_run(
-                    run_id,
+                return finish(
                     architecture_result.status,
                     architecture_result.stop_reason,
                     functional_success=False,
                     review_status="skipped",
                     review_reasons=[architecture_result.stop_reason],
                 )
-                return self.store.get_run(run_id)
+            if total_usage.duration_ms >= budget.max_seconds * 1_000:
+                return finish(
+                    RunStatus.TIMED_OUT,
+                    "time_budget_exhausted",
+                    functional_success=False,
+                    review_status="skipped",
+                    review_reasons=["time_budget_exhausted"],
+                )
 
             verification = self.sandbox.run(
-                workspace, case.verify_command, timeout_seconds=budget.max_seconds
+                workspace,
+                case.verify_command,
+                timeout_seconds=_remaining_seconds(total_usage, budget),
+            )
+            total_usage = _add_usage(
+                total_usage,
+                Usage(duration_ms=verification.duration_ms),
             )
             append(
                 "verification",
@@ -227,15 +281,22 @@ class RunService:
                 verification.duration_ms,
             )
             if verification.timed_out:
-                self.store.finish_run(
-                    run_id,
+                return finish(
                     RunStatus.TIMED_OUT,
                     "verification_timed_out",
                     functional_success=False,
                     review_status="skipped",
                     review_reasons=["verification_timed_out"],
                 )
-                return self.store.get_run(run_id)
+            global_reason = _budget_overrun_reason(total_usage, budget)
+            if global_reason is not None:
+                return finish(
+                    _status_for_budget_reason(global_reason),
+                    global_reason,
+                    functional_success=False,
+                    review_status="skipped",
+                    review_reasons=[global_reason],
+                )
             diff_text = self._workspace_diff(workspace)
             append(
                 "diff",
@@ -243,6 +304,17 @@ class RunService:
                 "completed" if diff_text.strip() else "empty",
                 "git diff --binary HEAD",
             )
+            if (
+                total_usage.duration_ms >= budget.max_seconds * 1_000
+                and self.reviewer.review_model is not None
+            ):
+                return finish(
+                    RunStatus.TIMED_OUT,
+                    "time_budget_exhausted",
+                    functional_success=False,
+                    review_status="skipped",
+                    review_reasons=["time_budget_exhausted"],
+                )
             review = self.reviewer.evaluate(
                 issue=case.issue,
                 reproduction_exit_code=reproduction.returncode,
@@ -250,17 +322,32 @@ class RunService:
                 diff_text=diff_text,
                 budget_exhausted=False,
             )
+            review_delta = review.usage
             append(
                 "review",
                 json.dumps(review.model_dump(), ensure_ascii=False),
                 review.status,
                 "deterministic gates and advisory review",
-                review.usage.duration_ms,
+                review_delta.duration_ms,
                 role="reviewer",
-                input_tokens=review.usage.input_tokens,
-                output_tokens=review.usage.output_tokens,
-                cost_usd=review.usage.cost_usd,
+                input_tokens=review_delta.input_tokens,
+                output_tokens=review_delta.output_tokens,
+                cost_usd=review_delta.cost_usd,
             )
+            total_usage = _add_usage(total_usage, review_delta)
+            if review_delta != Usage():
+                role_usage["reviewer"] = _add_usage(
+                    role_usage.get("reviewer", Usage()), review_delta
+                )
+            global_reason = _budget_overrun_reason(total_usage, budget)
+            if global_reason is not None:
+                return finish(
+                    _status_for_budget_reason(global_reason),
+                    global_reason,
+                    functional_success=False,
+                    review_status=review.status,
+                    review_reasons=review.reasons,
+                )
             terminal_status = RunStatus.SUCCEEDED if review.functional_success else RunStatus.FAILED
             stop_reason = (
                 "functional_success"
@@ -269,8 +356,7 @@ class RunService:
                 if review.reasons
                 else "review_failed"
             )
-            self.store.finish_run(
-                run_id,
+            return finish(
                 terminal_status,
                 stop_reason,
                 functional_success=review.functional_success,
@@ -279,8 +365,7 @@ class RunService:
             )
         except Exception as error:  # noqa: BLE001 - all runs must reach a persisted terminal state.
             stop_reason = f"run_error:{type(error).__name__}"
-            self.store.finish_run(
-                run_id,
+            return finish(
                 RunStatus.FAILED,
                 stop_reason,
                 functional_success=False,
@@ -314,3 +399,47 @@ class RunService:
         if completed.returncode != 0:
             raise RuntimeError(completed.stderr.strip() or "git diff failed")
         return completed.stdout
+
+
+def _add_usage(left: Usage, right: Usage) -> Usage:
+    return Usage(
+        **{field: getattr(left, field) + getattr(right, field) for field in Usage.model_fields}
+    )
+
+
+def _merge_role_usage(
+    current: dict[str, Usage],
+    additions: dict[object, Usage],
+) -> dict[str, Usage]:
+    merged = dict(current)
+    for role, usage in additions.items():
+        name = str(role)
+        merged[name] = _add_usage(merged.get(name, Usage()), usage)
+    return merged
+
+
+def _budget_overrun_reason(usage: Usage, budget: Budget) -> str | None:
+    if usage.duration_ms > budget.max_seconds * 1_000:
+        return "time_budget_exhausted"
+    if usage.tool_calls > budget.max_tool_calls:
+        return "tool_budget_exhausted"
+    if usage.patch_attempts > budget.max_patch_attempts:
+        return "patch_budget_exhausted"
+    if usage.input_tokens > budget.max_input_tokens:
+        return "input_token_budget_exhausted"
+    if usage.output_tokens > budget.max_output_tokens:
+        return "output_token_budget_exhausted"
+    if usage.cost_usd > budget.max_cost_usd:
+        return "cost_budget_exhausted"
+    return None
+
+
+def _status_for_budget_reason(reason: str) -> RunStatus:
+    if reason == "time_budget_exhausted":
+        return RunStatus.TIMED_OUT
+    return RunStatus.BUDGET_EXHAUSTED
+
+
+def _remaining_seconds(usage: Usage, budget: Budget) -> int:
+    remaining_ms = budget.max_seconds * 1_000 - usage.duration_ms
+    return max(1, (remaining_ms + 999) // 1_000)

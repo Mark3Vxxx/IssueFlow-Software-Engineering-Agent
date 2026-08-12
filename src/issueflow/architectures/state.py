@@ -14,6 +14,7 @@ MAX_PLAN_STEPS = 6
 MAX_EVIDENCE_ITEMS = 20
 MAX_EVIDENCE_SUMMARY_CHARS = 2_000
 MAX_DIFF_CHARS = 20_000
+MAX_PUBLIC_TEST_RESULT_CHARS = 2_000
 MAX_ROLE_HISTORY = 50
 
 
@@ -63,7 +64,7 @@ class CoderOutput(_StrictOutput):
     """Coder's bounded state summary and allowlisted workspace operations."""
 
     current_diff: str = Field(max_length=MAX_DIFF_CHARS)
-    public_test_result: str = ""
+    public_test_result: str = Field(default="", max_length=MAX_PUBLIC_TEST_RESULT_CHARS)
     tool_calls: list[CoderToolCall] = Field(default_factory=list, max_length=6)
 
 
@@ -76,6 +77,7 @@ class ReviewOutput(_StrictOutput):
 
 EvidenceList = Annotated[list[EvidenceItem], Field(max_length=MAX_EVIDENCE_ITEMS)]
 DiffText = Annotated[str, Field(max_length=MAX_DIFF_CHARS)]
+PublicTestResult = Annotated[str, Field(max_length=MAX_PUBLIC_TEST_RESULT_CHARS)]
 RoleHistory = Annotated[list[RoleName], Field(max_length=MAX_ROLE_HISTORY)]
 
 
@@ -87,7 +89,7 @@ class WorkflowState(TypedDict):
     plan: PlanOutput | None
     evidence: EvidenceList
     current_diff: DiffText
-    public_test_result: str
+    public_test_result: PublicTestResult
     review_feedback: ReviewOutput | None
     usage: Usage
     role_usage: dict[RoleName, Usage]

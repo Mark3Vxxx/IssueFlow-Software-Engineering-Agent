@@ -231,6 +231,9 @@ class FixedMultiAgentArchitecture:
                         "role": role,
                         "step_type": "role",
                         "duration_ms": role_duration_ms,
+                        "input_tokens": delta.input_tokens,
+                        "output_tokens": delta.output_tokens,
+                        "cost_usd": delta.cost_usd,
                     }
                 )
                 steps.append(step)

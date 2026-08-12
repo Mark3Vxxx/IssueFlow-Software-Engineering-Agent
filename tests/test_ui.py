@@ -132,6 +132,15 @@ def test_run_view_aggregates_efficiency_metrics_from_persisted_steps():
             "functional_success": False,
             "review_status": "approved",
             "review_reasons": ["Focused fix."],
+            "usage": {
+                "model_calls": 2,
+                "tool_calls": 2,
+                "patch_attempts": 1,
+                "input_tokens": 180,
+                "output_tokens": 50,
+                "cost_usd": 0.00003,
+                "duration_ms": 40,
+            },
         },
         "steps": [
             {
@@ -187,6 +196,59 @@ def test_run_view_aggregates_efficiency_metrics_from_persisted_steps():
     assert view.architecture_label == "Single Agent"
     assert view.role_call_counts == {"single_agent": 2}
     assert view.route_count == 0
+
+
+def test_run_view_uses_authoritative_run_usage_without_summing_steps_twice():
+    trace = {
+        "run": {
+            "architecture": "fixed",
+            "status": "succeeded",
+            "usage": {
+                "model_calls": 4,
+                "tool_calls": 3,
+                "patch_attempts": 1,
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cost_usd": 0.001,
+                "duration_ms": 80,
+            },
+        },
+        "steps": [
+            {
+                "sequence": 1,
+                "role": "planner",
+                "step_type": "role",
+                "input_summary": "bounded workflow state",
+                "output_summary": "plan",
+                "status": "completed",
+                "duration_ms": 80,
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cost_usd": 0.001,
+            },
+            {
+                "sequence": 2,
+                "role": "coder",
+                "step_type": "tool",
+                "input_summary": "apply_patch",
+                "output_summary": "done",
+                "status": "completed",
+                "duration_ms": 80,
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cost_usd": 0.001,
+            },
+        ],
+        "artifacts": [],
+    }
+
+    assert make_run_view(trace).metrics == {
+        "duration_ms": 80,
+        "tool_calls": 3,
+        "input_tokens": 100,
+        "output_tokens": 20,
+        "cost_usd": 0.001,
+    }
 
 
 def test_run_view_builds_a_redacted_human_readable_timeline():

@@ -206,6 +206,23 @@ def make_run_view(trace: dict[str, object]) -> RunView:
         if is_role_call and role != "system":
             role_call_counts[role] = role_call_counts.get(role, 0) + 1
     route_step_type = "role" if architecture is ArchitectureKind.FIXED else "route"
+    persisted_usage = run.get("usage")
+    if isinstance(persisted_usage, dict):
+        metrics = {
+            "duration_ms": int(persisted_usage.get("duration_ms", 0)),
+            "tool_calls": int(persisted_usage.get("tool_calls", 0)),
+            "input_tokens": int(persisted_usage.get("input_tokens", 0)),
+            "output_tokens": int(persisted_usage.get("output_tokens", 0)),
+            "cost_usd": float(persisted_usage.get("cost_usd", 0.0)),
+        }
+    else:
+        metrics = {
+            "duration_ms": sum(int(step["duration_ms"]) for step in steps),
+            "tool_calls": sum(step["step_type"] == "tool" for step in steps),
+            "input_tokens": sum(int(step["input_tokens"]) for step in steps),
+            "output_tokens": sum(int(step["output_tokens"]) for step in steps),
+            "cost_usd": float(sum(Decimal(str(step["cost_usd"])) for step in steps)),
+        }
     return RunView(
         status_label=STATUS_LABELS.get(str(run.get("status")), str(run.get("status"))),
         functional_success=run.get("functional_success"),
@@ -216,13 +233,7 @@ def make_run_view(trace: dict[str, object]) -> RunView:
         architecture_label=ARCHITECTURE_LABELS[architecture],
         role_call_counts=role_call_counts,
         route_count=sum(str(step["step_type"]) == route_step_type for step in steps),
-        metrics={
-            "duration_ms": sum(int(step["duration_ms"]) for step in steps),
-            "tool_calls": sum(step["step_type"] == "tool" for step in steps),
-            "input_tokens": sum(int(step["input_tokens"]) for step in steps),
-            "output_tokens": sum(int(step["output_tokens"]) for step in steps),
-            "cost_usd": float(sum(Decimal(str(step["cost_usd"])) for step in steps)),
-        },
+        metrics=metrics,
         timeline=timeline,
         diff_text=diff_text,
     )

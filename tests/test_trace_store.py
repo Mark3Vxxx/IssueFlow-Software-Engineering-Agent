@@ -3,7 +3,7 @@ import sqlite3
 
 import pytest
 
-from issueflow.models import RunRecord, RunStatus, TraceStep
+from issueflow.models import RunRecord, RunStatus, TraceStep, Usage
 from issueflow.trace_store import TraceStore
 
 
@@ -57,11 +57,20 @@ def test_finish_run_records_terminal_status_and_reason(store, run_record):
     store.create_run(run_record)
     store.start_run(run_record.id)
 
-    store.finish_run(run_record.id, RunStatus.SUCCEEDED, "public_tests_passed")
+    usage = Usage(model_calls=2, tool_calls=3, input_tokens=40, cost_usd=0.001)
+    store.finish_run(
+        run_record.id,
+        RunStatus.SUCCEEDED,
+        "public_tests_passed",
+        usage=usage,
+        role_usage={"single_agent": usage},
+    )
 
     exported = store.export_json(run_record.id)
     assert exported["run"]["status"] == "succeeded"
     assert exported["run"]["stop_reason"] == "public_tests_passed"
+    assert exported["run"]["usage"] == usage.model_dump()
+    assert exported["run"]["role_usage"] == {"single_agent": usage.model_dump()}
 
 
 def test_run_state_must_transition_from_queued_to_running_to_terminal(store, run_record):
@@ -141,6 +150,8 @@ def test_existing_database_migrates_architecture_with_safe_single_default(tmp_pa
     assert architecture_column[2:5] == ("TEXT", 1, "'single'")
     assert migrated.get_run("legacy-run").architecture == "single"
     assert migrated.export_json("legacy-run")["run"]["architecture"] == "single"
+    assert migrated.export_json("legacy-run")["run"]["usage"] == Usage().model_dump()
+    assert migrated.export_json("legacy-run")["run"]["role_usage"] == {}
 
 
 def test_new_run_json_includes_selected_architecture(store):
