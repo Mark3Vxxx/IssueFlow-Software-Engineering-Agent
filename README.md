@@ -2,7 +2,33 @@
 
 [中文说明](README.zh-CN.md) · [Phase-one evaluation](docs/phase-1-evaluation.md) · [Three-minute demo](docs/demo-script.md)
 
-IssueFlow is a reproducible single-agent software-repair MVP for Apple Silicon Macs. It runs one real DeepSeek agent against five pinned `karpathy/micrograd` benchmark cases, executes registered checks inside a network-disabled Docker sandbox, and persists the evidence to SQLite and downloadable JSON.
+IssueFlow is a reproducible software-engineering Agent MVP. Phase one turns a vague idea, "let an Agent fix a bug," into a bounded experiment: a real LLM agent receives a pinned benchmark issue, works inside a controlled Git workspace, runs only registered checks in Docker, and leaves behind an auditable trace.
+
+The current release focuses on one architecture, one benchmark family, and one clear question:
+
+> Can a single Agent repair small Python bugs while every important step is reproducible, budgeted, sandboxed, and reviewable?
+
+## Phase-one snapshot
+
+| Area | Status |
+| --- | --- |
+| Benchmark catalog | 5 pinned `karpathy/micrograd` cases with provenance, reproduction, verification, and reference patches |
+| Repair architecture | Single DeepSeek-powered Agent with allowlisted tools: search, read, patch, and registered test execution |
+| Runtime safety | Network-disabled Docker sandbox, bounded CPU/memory/time/processes, and fixed tool budgets |
+| Success judgment | Independent verification plus deterministic gates before any advisory model review |
+| Evidence trail | SQLite persistence, redacted JSON export, Streamlit UI, diff, metrics, timeline, and reviewer result |
+| Validation | `make verify-phase-1` covers lint, tests, sandbox image, benchmark replay, and trace checks |
+
+## Why it matters
+
+Many Agent demos are hard to evaluate because the environment, budget, test commands, and stopping rules are vague. IssueFlow makes those parts explicit. The point of phase one is not to claim a production repair service; it is to build a small but honest evaluation loop that can be extended into multi-agent comparisons later.
+
+What phase one proves:
+
+- A benchmark case can fully describe the repository revision, injected or historical bug, reproduction command, verification command, and reference patch.
+- A live Agent run can be constrained by tool count, patch count, wall-clock time, tokens, and cost.
+- Functional success can be decided by independent checks and a non-empty diff, without trusting the model's own explanation.
+- Every meaningful step can be stored, redacted, exported, and inspected after the run.
 
 ## What you will learn
 
@@ -25,6 +51,18 @@ flowchart LR
 - **RunService** connects reproduction, Agent execution, independent verification, diff collection, review, and persistence.
 - **Reviewer** applies deterministic functional gates first; model review is advisory and cannot override failed tests.
 - **TraceStore and UI** preserve and display the ordered, redacted evidence.
+
+## Repository map
+
+| Path | Purpose |
+| --- | --- |
+| [`benchmarks/micrograd.yaml`](benchmarks/micrograd.yaml) | Phase-one benchmark catalog and provenance |
+| [`src/issueflow`](src/issueflow) | Agent loop, sandbox tools, run orchestration, review, tracing, and UI support |
+| [`docker`](docker) | Reproducible verification environment |
+| [`tests`](tests) | Unit, integration, Docker, benchmark, and trace checks |
+| [`artifacts/phase-1`](artifacts/phase-1) | Credential-safe evidence from a live Agent run |
+| [`docs/phase-1-evaluation.md`](docs/phase-1-evaluation.md) | Evaluation notes and phase-one evidence summary |
+| [`docs/demo-script.md`](docs/demo-script.md) | Three-minute presentation script |
 
 ## Prerequisites
 
