@@ -121,6 +121,7 @@ class AgentResult(BaseModel):
     status: RunStatus
     stop_reason: str
     steps: list[TraceStep] = Field(default_factory=list)
+    model_calls: NonNegativeInt = 0
     tool_calls: NonNegativeInt = 0
     patch_attempts: NonNegativeInt = 0
     input_tokens: NonNegativeInt = 0
@@ -473,6 +474,7 @@ class SingleAgent:
         """Run the bounded repair loop for one benchmark case."""
         steps: list[TraceStep] = []
         history: list[dict[str, object]] = []
+        model_calls = 0
         tool_calls = 0
         patch_attempts = 0
         input_tokens = 0
@@ -488,6 +490,7 @@ class SingleAgent:
                 status=status,
                 stop_reason=stop_reason,
                 steps=steps,
+                model_calls=model_calls,
                 tool_calls=tool_calls,
                 patch_attempts=patch_attempts,
                 input_tokens=input_tokens,
@@ -531,6 +534,7 @@ class SingleAgent:
             if tool_calls >= budget.max_tool_calls:
                 return result(RunStatus.BUDGET_EXHAUSTED, "tool_budget_exhausted")
 
+            model_calls += 1
             try:
                 action = self.model.next_action(case.issue, history)
             except (httpx.HTTPError, ValueError, TypeError, KeyError, IndexError) as error:

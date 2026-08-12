@@ -23,6 +23,7 @@ class ScriptedSingle:
                     status="completed",
                 )
             ],
+            model_calls=3,
             tool_calls=2,
             patch_attempts=1,
             final_message="Fixed the issue.",
@@ -78,5 +79,6 @@ def test_single_adapter_preserves_terminal_result(case, workspace, budget):
 
     assert result.architecture is ArchitectureKind.SINGLE
     assert result.status is RunStatus.SUCCEEDED
+    assert result.usage.model_calls == 3
     assert result.role_usage[RoleName.SINGLE_AGENT].tool_calls == 2
     assert result.steps[0].role == "single_agent"

@@ -29,6 +29,7 @@ class SingleArchitecture:
         del context
         result = self.agent.run(case, workspace, budget)
         usage = Usage(
+            model_calls=result.model_calls,
             tool_calls=result.tool_calls,
             patch_attempts=result.patch_attempts,
             input_tokens=result.input_tokens,

@@ -90,6 +90,7 @@ def test_agent_stops_when_tool_budget_is_exhausted(tmp_path):
 
     assert result.status is RunStatus.BUDGET_EXHAUSTED
     assert result.stop_reason == "tool_budget_exhausted"
+    assert result.model_calls == 2
     assert len(result.steps) == 2
 
 
