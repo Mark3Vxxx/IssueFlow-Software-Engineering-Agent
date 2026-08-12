@@ -1,6 +1,6 @@
 PYTHON := .venv/bin/python
 
-.PHONY: test test-ui test-e2e lint demo docker-build verify-benchmarks verify-phase-1
+.PHONY: test test-ui test-e2e test-phase-2 lint demo docker-build verify-benchmarks verify-phase-1
 
 test:
 	$(PYTHON) -m pytest
@@ -10,6 +10,9 @@ test-ui:
 
 test-e2e:
 	$(PYTHON) -m pytest tests/test_e2e_smoke.py -q
+
+test-phase-2:
+	$(PYTHON) -m pytest tests/phase2 -q
 
 lint:
 	$(PYTHON) -m ruff check src tests
