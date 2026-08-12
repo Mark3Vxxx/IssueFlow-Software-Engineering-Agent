@@ -35,6 +35,17 @@ class FailingReviewModel:
         )
 
 
+class InvalidParsedReviewModel:
+    def __init__(self, usage: Usage) -> None:
+        self.usage = usage
+
+    def review(self, issue: str, diff_text: str):
+        return StructuredCompletion(
+            value=AdvisoryPayload(status="invalid", reasons=["provider-secret-detail"]),
+            usage=self.usage,
+        )
+
+
 def test_functional_success_requires_all_deterministic_evidence():
     result = Reviewer().evaluate_deterministic(
         reproduction_exit_code=1,
@@ -109,6 +120,33 @@ def test_invalid_reviewer_json_is_failed_without_losing_functional_success():
         output_tokens=3,
         cost_usd=0.00002,
     )
+
+
+def test_invalid_parsed_reviewer_completion_preserves_every_usage_field():
+    usage = Usage(
+        model_calls=1,
+        tool_calls=2,
+        patch_attempts=3,
+        input_tokens=19,
+        output_tokens=3,
+        cost_usd=0.25,
+        duration_ms=17,
+    )
+    reviewer = Reviewer(review_model=InvalidParsedReviewModel(usage))
+
+    result = reviewer.evaluate(
+        issue="Unary negation returns the wrong value.",
+        reproduction_exit_code=1,
+        verification_exit_code=0,
+        diff_text="diff --git a/micrograd/engine.py b/micrograd/engine.py",
+        budget_exhausted=False,
+    )
+
+    assert result.functional_success is True
+    assert result.status == "failed"
+    assert result.reasons == ["invalid_reviewer_response"]
+    assert result.usage == usage
+    assert "provider-secret-detail" not in result.model_dump_json()
 
 
 def test_deepseek_review_client_requests_structured_json():

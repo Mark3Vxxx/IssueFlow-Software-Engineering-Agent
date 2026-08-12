@@ -3,6 +3,7 @@ from pathlib import Path
 from subprocess import run
 
 from pydantic import BaseModel
+from test_reviewer import InvalidParsedReviewModel
 
 from issueflow.agent import AgentResult
 from issueflow.architectures.base import (
@@ -191,6 +192,46 @@ def test_successful_run_persists_full_evidence_and_advisory_review(tmp_path):
     assert exported["steps"][-1]["input_tokens"] == 37
     assert exported["steps"][-1]["output_tokens"] == 11
     assert exported["steps"][-1]["cost_usd"] == 0.00004
+
+
+def test_invalid_parsed_review_persists_usage_without_overriding_success(tmp_path):
+    case = make_case()
+    store = TraceStore(tmp_path / "issueflow.sqlite3")
+    usage = Usage(
+        model_calls=1,
+        input_tokens=19,
+        output_tokens=3,
+        cost_usd=0.25,
+        duration_ms=17,
+    )
+    service = RunService(
+        catalog={case.id: case},
+        store=store,
+        workspace_preparer=LocalWorkspacePreparer(tmp_path / "workspaces"),
+        sandbox=SequenceSandbox([1, 0]),
+        agent_factory=lambda selected_case, workspace: RepairingAgent(),
+        reviewer=Reviewer(InvalidParsedReviewModel(usage)),
+    )
+
+    result = service.start(case.id, make_budget())
+
+    assert result.status is RunStatus.SUCCEEDED
+    assert result.functional_success is True
+    assert result.review_status == "failed"
+    assert result.review_reasons == ["invalid_reviewer_response"]
+    exported = store.export_json(result.id)
+    review_step = exported["steps"][-1]
+    assert review_step["step_type"] == "review"
+    assert review_step["status"] == "failed"
+    assert review_step["duration_ms"] == 17
+    assert review_step["input_tokens"] == 19
+    assert review_step["output_tokens"] == 3
+    assert review_step["cost_usd"] == 0.25
+    assert sum(step["duration_ms"] for step in exported["steps"]) == 27
+    assert sum(step["input_tokens"] for step in exported["steps"]) == 19
+    assert sum(step["output_tokens"] for step in exported["steps"]) == 3
+    assert sum(step["cost_usd"] for step in exported["steps"]) == 0.25
+    assert "provider-secret-detail" not in store.export_json_text(result.id)
 
 
 def test_default_and_explicit_architectures_are_persisted_with_the_same_budget(tmp_path):

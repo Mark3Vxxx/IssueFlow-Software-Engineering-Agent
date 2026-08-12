@@ -172,8 +172,10 @@ class Reviewer:
                 reasons=deterministic.reasons,
             )
 
+        usage = Usage(model_calls=1)
         try:
             completion = self.review_model.review(issue, diff_text)
+            usage = completion.usage
             raw_review = completion.value
             if isinstance(raw_review, BaseModel):
                 raw_review = raw_review.model_dump()
@@ -193,20 +195,20 @@ class Reviewer:
                 functional_success=True,
                 status="failed",
                 reasons=["reviewer_request_failed"],
-                usage=Usage(model_calls=1),
+                usage=usage,
             )
         except (AttributeError, ValueError, TypeError):
             return ReviewResult(
                 functional_success=True,
                 status="failed",
                 reasons=["invalid_reviewer_response"],
-                usage=Usage(model_calls=1),
+                usage=usage,
             )
         return ReviewResult(
             functional_success=True,
             status=model_review.status,
             reasons=model_review.reasons,
-            usage=completion.usage,
+            usage=usage,
         )
 
 

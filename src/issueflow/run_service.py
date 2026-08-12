@@ -286,6 +286,7 @@ class RunService:
                 json.dumps(review.model_dump(), ensure_ascii=False),
                 review.status,
                 "deterministic gates and advisory review",
+                review.usage.duration_ms,
                 role="reviewer",
                 input_tokens=review.usage.input_tokens,
                 output_tokens=review.usage.output_tokens,
