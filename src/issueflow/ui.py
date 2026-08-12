@@ -12,6 +12,7 @@ import streamlit as st
 
 from issueflow.agent import DeepSeekModelClient, SingleAgent, ToolExecutor
 from issueflow.benchmark import load_catalog
+from issueflow.budget import budget_for_case
 from issueflow.config import Settings
 from issueflow.models import BenchmarkCase, Budget, RunRecord
 from issueflow.reviewer import DeepSeekReviewClient, Reviewer
@@ -28,14 +29,29 @@ STATUS_LABELS = {
     "budget_exhausted": "预算已用尽",
 }
 
-DEFAULT_BUDGET = Budget(
-    max_tool_calls=12,
-    max_patch_attempts=2,
-    max_seconds=300,
-    max_input_tokens=30_000,
-    max_output_tokens=6_000,
-    max_cost_usd=0.05,
-)
+STOP_REASON_LABELS = {
+    "patch_budget_exhausted": "补丁次数预算已用尽",
+    "tool_budget_exhausted": "工具调用预算已用尽",
+    "time_budget_exhausted": "运行时间预算已用尽",
+    "input_token_budget_exhausted": "输入 Token 预算已用尽",
+    "output_token_budget_exhausted": "输出 Token 预算已用尽",
+    "cost_budget_exhausted": "成本预算已用尽",
+}
+
+
+def describe_stop_reason(reason: str) -> str:
+    """Translate known terminal reasons and safely preserve unknown evidence."""
+    return STOP_REASON_LABELS.get(reason, redact(reason))
+
+
+def format_budget_summary(case: BenchmarkCase, budget: Budget) -> str:
+    """Render every hard limit selected for one catalog case."""
+    return (
+        f"预算档位：{case.budget_profile} · 工具 {budget.max_tool_calls} 次 · "
+        f"补丁 {budget.max_patch_attempts} 次 · {budget.max_seconds} 秒 · "
+        f"输入 {budget.max_input_tokens:,} Token · "
+        f"输出 {budget.max_output_tokens:,} Token · 最高 ${budget.max_cost_usd:.2f}"
+    )
 
 
 class RunStarter(Protocol):
@@ -105,6 +121,7 @@ class RunView:
     status_label: str
     functional_success: bool | None
     stop_reason: str
+    stop_reason_label: str
     review_status: str
     review_reasons: tuple[str, ...]
     metrics: dict[str, int | float]
@@ -157,6 +174,7 @@ def make_run_view(trace: dict[str, object]) -> RunView:
         status_label=STATUS_LABELS.get(str(run.get("status")), str(run.get("status"))),
         functional_success=run.get("functional_success"),
         stop_reason=redact(str(run.get("stop_reason") or "")),
+        stop_reason_label=describe_stop_reason(str(run.get("stop_reason") or "")),
         review_status=str(run.get("review_status") or "未审查"),
         review_reasons=tuple(redact(str(reason)) for reason in review_reasons),
         metrics={
@@ -223,15 +241,18 @@ def render_app(
     st.caption("选择一个固定 Benchmark，观察 Agent 如何复现、定位、修改并独立验证。")
     selected_label = st.selectbox("选择案例", list(case_views))
     selected = case_views[selected_label]
+    selected_case = catalog[selected.id]
+    selected_budget = budget_for_case(selected_case)
 
     st.subheader(selected.id)
     st.markdown(f"**样本来源：** {selected.origin_label}")
     st.markdown(f"**Issue：** {selected.issue}")
     st.markdown(f"**最近状态：** {selected.latest_status_label}")
+    st.caption(format_budget_summary(selected_case, selected_budget))
     if st.button("开始真实修复", type="primary", disabled=run_session.is_running):
         st.session_state.pop("issueflow_run_id", None)
         st.session_state.pop("issueflow_run_error", None)
-        run_session.start(selected.id, DEFAULT_BUDGET)
+        run_session.start(selected.id, selected_budget)
 
     @st.fragment(run_every=2 if run_session.is_running else None)
     def render_run_panel() -> None:
@@ -263,6 +284,7 @@ def _render_finished_run(store: object, run_id: str) -> None:
         st.success("功能验证通过")
     else:
         st.error(f"运行结束：{view.status_label}")
+        st.warning(f"停止原因：{view.stop_reason_label}")
 
     duration_seconds = float(view.metrics["duration_ms"]) / 1_000
     columns = st.columns(5)

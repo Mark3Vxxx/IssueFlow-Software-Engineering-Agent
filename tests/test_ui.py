@@ -6,9 +6,47 @@ import pytest
 from pydantic import SecretStr
 from streamlit.testing.v1 import AppTest
 
+from issueflow.benchmark import load_catalog
+from issueflow.budget import budget_for_case
 from issueflow.config import Settings
 from issueflow.models import BenchmarkCase, Budget, RunRecord, RunStatus
-from issueflow.ui import RunSession, build_runtime, make_case_view, make_run_view
+from issueflow.ui import (
+    RunSession,
+    build_runtime,
+    describe_stop_reason,
+    format_budget_summary,
+    make_case_view,
+    make_run_view,
+)
+
+
+@pytest.mark.parametrize(
+    ("reason", "expected"),
+    [
+        ("patch_budget_exhausted", "补丁次数预算已用尽"),
+        ("tool_budget_exhausted", "工具调用预算已用尽"),
+        ("time_budget_exhausted", "运行时间预算已用尽"),
+        ("input_token_budget_exhausted", "输入 Token 预算已用尽"),
+        ("output_token_budget_exhausted", "输出 Token 预算已用尽"),
+        ("cost_budget_exhausted", "成本预算已用尽"),
+    ],
+)
+def test_stop_reason_describes_each_budget_boundary(reason, expected):
+    assert describe_stop_reason(reason) == expected
+
+
+def test_stop_reason_redacts_unknown_technical_text():
+    assert describe_stop_reason("DEEPSEEK_API_KEY=secret") == "[REDACTED]"
+
+
+def test_budget_summary_contains_profile_and_every_limit():
+    case = load_catalog(Path("benchmarks/micrograd.yaml"))["historical-01"]
+    budget = budget_for_case(case)
+
+    assert format_budget_summary(case, budget) == (
+        "预算档位：medium · 工具 18 次 · 补丁 4 次 · 450 秒 · "
+        "输入 50,000 Token · 输出 8,000 Token · 最高 $0.10"
+    )
 
 
 def test_case_view_distinguishes_constructed_samples_from_historical_repairs():
@@ -88,9 +126,9 @@ def test_run_view_aggregates_efficiency_metrics_from_persisted_steps():
         "run": {
             "id": "run-123",
             "case_id": "constructed-01",
-            "status": "succeeded",
-            "stop_reason": "functional_success",
-            "functional_success": True,
+            "status": "failed",
+            "stop_reason": "patch_budget_exhausted",
+            "functional_success": False,
             "review_status": "approved",
             "review_reasons": ["Focused fix."],
         },
@@ -137,6 +175,7 @@ def test_run_view_aggregates_efficiency_metrics_from_persisted_steps():
 
     view = make_run_view(trace)
 
+    assert view.stop_reason_label == "补丁次数预算已用尽"
     assert view.metrics == {
         "duration_ms": 40,
         "tool_calls": 2,
@@ -314,6 +353,10 @@ class StaticService:
     catalog = load_catalog(Path("benchmarks/micrograd.yaml"))
 
     def start(self, case_id, budget):
+        assert case_id == "historical-01"
+        assert budget.max_tool_calls == 18
+        assert budget.max_patch_attempts == 4
+        assert budget.max_seconds == 450
         return RunRecord(
             id="run-123",
             case_id=case_id,
@@ -380,6 +423,14 @@ render_app(StaticStore(), StaticService(), submit=immediate_submit)
 """
     app = AppTest.from_string(script).run()
 
+    assert any(
+        caption.value
+        == (
+            "预算档位：medium · 工具 18 次 · 补丁 4 次 · 450 秒 · "
+            "输入 50,000 Token · 输出 8,000 Token · 最高 $0.10"
+        )
+        for caption in app.caption
+    )
     app.button[0].click().run()
 
     assert not app.exception
@@ -393,6 +444,68 @@ render_app(StaticStore(), StaticService(), submit=immediate_submit)
     ]
     assert app.code[0].value == "diff --git a/engine.py b/engine.py"
     assert app.download_button[0].label == "下载 JSON 轨迹"
+
+
+def test_workbench_explains_the_exact_exhausted_budget():
+    script = """
+from concurrent.futures import Future
+from pathlib import Path
+
+from issueflow.benchmark import load_catalog
+from issueflow.models import RunRecord, RunStatus
+from issueflow.ui import render_app
+
+
+class StaticService:
+    catalog = load_catalog(Path("benchmarks/micrograd.yaml"))
+
+    def start(self, case_id, budget):
+        return RunRecord(
+            id="run-budget",
+            case_id=case_id,
+            status=RunStatus.BUDGET_EXHAUSTED,
+            stop_reason="patch_budget_exhausted",
+            functional_success=False,
+            review_status="skipped",
+            review_reasons=["patch_budget_exhausted"],
+        )
+
+
+class StaticStore:
+    def export_json(self, run_id):
+        return {
+            "run": {
+                "id": run_id,
+                "case_id": "historical-01",
+                "status": "budget_exhausted",
+                "stop_reason": "patch_budget_exhausted",
+                "functional_success": False,
+                "review_status": "skipped",
+                "review_reasons": ["patch_budget_exhausted"],
+            },
+            "steps": [],
+            "artifacts": [],
+        }
+
+    def export_json_text(self, run_id):
+        return '{"run":{"id":"run-budget"}}'
+
+
+def immediate_submit(function, *args):
+    future = Future()
+    future.set_result(function(*args))
+    return future
+
+
+render_app(StaticStore(), StaticService(), submit=immediate_submit)
+"""
+    app = AppTest.from_string(script).run()
+
+    app.button[0].click().run()
+
+    assert not app.exception
+    assert app.error[0].value == "运行结束：预算已用尽"
+    assert app.warning[0].value == "停止原因：补丁次数预算已用尽"
 
 
 def test_runtime_wires_each_cases_registered_commands_into_its_agent(tmp_path):
