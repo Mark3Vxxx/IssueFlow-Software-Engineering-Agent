@@ -674,10 +674,10 @@ Run:
 
 ```bash
 git diff --check
-.venv/bin/python -c "import os, subprocess; text=subprocess.run(['git','diff'],capture_output=True,text=True,check=True).stdout; key=os.environ.get('DEEPSEEK_API_KEY'); assert 'DEEPSEEK_API_KEY=' not in text; assert not key or key not in text; print('credential-scan=PASS')"
+.venv/bin/python -c "import os, subprocess; text=subprocess.run(['git','diff','main..HEAD'],capture_output=True,text=True,check=True).stdout; key=os.environ.get('DEEPSEEK_API_KEY'); assert not key or key not in text; print('credential-scan=PASS')"
 ```
 
-Expected: no whitespace errors and `credential-scan=PASS` without printing the key.
+Expected: no whitespace errors and `credential-scan=PASS` without printing the key. Controlled literal credential markers used by redaction tests are allowed; when set, the actual environment value must be absent from `main..HEAD`.
 
 - [ ] **Step 6: Start the workbench and check its health endpoint**
 
