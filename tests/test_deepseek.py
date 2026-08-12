@@ -12,6 +12,7 @@ def test_deepseek_client_sends_tools_and_parses_tool_call():
         assert request.headers["authorization"] == "Bearer test-key"
         assert payload["model"] == "deepseek-v4-flash"
         assert payload["thinking"] == {"type": "disabled"}
+        assert payload["temperature"] == 0.0
         assert {tool["function"]["name"] for tool in payload["tools"]} == {
             "search",
             "read_file",
@@ -62,6 +63,28 @@ def test_deepseek_client_sends_tools_and_parses_tool_call():
     assert action.input_tokens == 100
     assert action.output_tokens == 20
     assert action.cost_usd > 0
+
+
+def test_deepseek_client_sends_configured_temperature():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert json.loads(request.content)["temperature"] == 1.25
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": "The repair is complete."}}],
+                "usage": {"prompt_tokens": 12, "completion_tokens": 5},
+            },
+        )
+
+    client = DeepSeekModelClient(
+        api_key="test-key",
+        model="deepseek-v4-flash",
+        base_url="https://api.deepseek.com",
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        temperature=1.25,
+    )
+
+    client.next_action("Negation is broken", history=[])
 
 
 def test_deepseek_client_parses_a_final_message_without_tool_call():

@@ -14,6 +14,7 @@ import httpx
 from pydantic import BaseModel, Field, NonNegativeFloat, NonNegativeInt
 
 from issueflow.models import BenchmarkCase, Budget, RunStatus, TraceStep
+from issueflow.structured_model import estimate_cost
 
 ALLOWED_TOOLS = frozenset({"search", "read_file", "apply_patch", "run_tests"})
 TOOL_ARGUMENTS = {
@@ -98,12 +99,6 @@ TOOL_DEFINITIONS = [
     },
 ]
 
-MODEL_PRICES_PER_MILLION = {
-    "deepseek-v4-flash": {"cache_hit": 0.0028, "cache_miss": 0.14, "output": 0.28},
-    "deepseek-v4-pro": {"cache_hit": 0.003625, "cache_miss": 0.435, "output": 0.87},
-}
-
-
 class ModelAction(BaseModel):
     """One structured action proposed by the model."""
 
@@ -147,12 +142,14 @@ class DeepSeekModelClient:
         base_url: str,
         http_client: httpx.Client | None = None,
         test_commands: tuple[str, ...] = (),
+        temperature: float = 0.0,
     ) -> None:
         self.api_key = api_key
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.http_client = http_client or httpx.Client(timeout=60)
         self.test_commands = tuple(dict.fromkeys(test_commands))
+        self.temperature = temperature
 
     def next_action(self, issue: str, history: list[dict[str, object]]) -> ModelAction:
         """Request exactly one structured tool action, or a final response."""
@@ -182,6 +179,7 @@ class DeepSeekModelClient:
                 "tool_choice": "auto",
                 "thinking": {"type": "disabled"},
                 "stream": False,
+                "temperature": self.temperature,
                 "max_tokens": 2_048,
             },
         )
@@ -228,16 +226,7 @@ class DeepSeekModelClient:
         self, usage: dict[str, object], input_tokens: int, output_tokens: int
     ) -> float:
         """Estimate request cost from the current official per-token rates."""
-        prices = MODEL_PRICES_PER_MILLION.get(self.model)
-        if prices is None:
-            return 0.0
-        cache_hit = int(usage.get("prompt_cache_hit_tokens", 0))
-        cache_miss = int(usage.get("prompt_cache_miss_tokens", input_tokens - cache_hit))
-        return (
-            cache_hit * prices["cache_hit"]
-            + cache_miss * prices["cache_miss"]
-            + output_tokens * prices["output"]
-        ) / 1_000_000
+        return estimate_cost(self.model, usage)
 
 
 class SandboxExecution(Protocol):
