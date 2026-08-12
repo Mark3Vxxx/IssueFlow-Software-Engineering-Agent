@@ -105,6 +105,7 @@ class RunRecord(BaseModel):
 
     id: str
     case_id: str
+    architecture: Literal["direct", "single", "fixed", "dynamic"] = "single"
     status: RunStatus = RunStatus.QUEUED
     stop_reason: str | None = None
     functional_success: bool | None = None

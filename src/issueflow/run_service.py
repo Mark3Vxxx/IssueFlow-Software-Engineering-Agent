@@ -8,6 +8,12 @@ from typing import Protocol
 from uuid import uuid4
 
 from issueflow.agent import AgentResult
+from issueflow.architectures.base import (
+    ArchitectureKind,
+    ArchitectureRunner,
+    RunContext,
+)
+from issueflow.architectures.single import SingleArchitecture
 from issueflow.models import BenchmarkCase, Budget, RunRecord, RunStatus, TraceStep
 from issueflow.reviewer import Reviewer
 from issueflow.sandbox import SandboxResult
@@ -33,6 +39,7 @@ class AgentRunner(Protocol):
 
 
 AgentFactory = Callable[[BenchmarkCase, Path], AgentRunner]
+ArchitectureFactory = Callable[[ArchitectureKind, BenchmarkCase, Path], ArchitectureRunner]
 
 
 class GitWorkspacePreparer:
@@ -97,21 +104,53 @@ class RunService:
         store: TraceStore,
         workspace_preparer: WorkspacePreparer,
         sandbox: SandboxRunner,
-        agent_factory: AgentFactory,
-        reviewer: Reviewer,
+        architecture_factory: ArchitectureFactory | None = None,
+        reviewer: Reviewer | None = None,
+        *,
+        agent_factory: AgentFactory | None = None,
     ) -> None:
+        if reviewer is None:
+            raise ValueError("reviewer is required")
+        if architecture_factory is not None and agent_factory is not None:
+            raise ValueError("provide architecture_factory or agent_factory, not both")
+        if architecture_factory is None:
+            if agent_factory is None:
+                raise ValueError("architecture_factory is required")
+
+            def adapt_single(
+                kind: ArchitectureKind,
+                case: BenchmarkCase,
+                workspace: Path,
+            ) -> ArchitectureRunner:
+                if kind is not ArchitectureKind.SINGLE:
+                    raise ValueError("legacy agent_factory supports only single")
+                return SingleArchitecture(agent_factory(case, workspace))
+
+            architecture_factory = adapt_single
         self.catalog = catalog
         self.store = store
         self.workspace_preparer = workspace_preparer
         self.sandbox = sandbox
-        self.agent_factory = agent_factory
+        self.architecture_factory = architecture_factory
         self.reviewer = reviewer
 
-    def start(self, case_id: str, budget: Budget) -> RunRecord:
+    def start(
+        self,
+        case_id: str,
+        budget: Budget,
+        architecture: ArchitectureKind = ArchitectureKind.SINGLE,
+    ) -> RunRecord:
         """Execute and persist one benchmark repair attempt."""
         case = self.catalog[case_id]
+        architecture = ArchitectureKind(architecture)
         run_id = f"run-{uuid4().hex}"
-        self.store.create_run(RunRecord(id=run_id, case_id=case.id))
+        self.store.create_run(
+            RunRecord(
+                id=run_id,
+                case_id=case.id,
+                architecture=architecture.value,
+            )
+        )
         self.store.start_run(run_id)
         sequence = 0
 
@@ -121,6 +160,11 @@ class RunService:
             status: str,
             input_summary: str,
             duration_ms: int = 0,
+            *,
+            role: str = "system",
+            input_tokens: int = 0,
+            output_tokens: int = 0,
+            cost_usd: float = 0.0,
         ) -> None:
             nonlocal sequence
             sequence += 1
@@ -128,12 +172,15 @@ class RunService:
                 run_id,
                 TraceStep(
                     sequence=sequence,
-                    role="single_agent",
+                    role=role,
                     step_type=step_type,
                     input_summary=input_summary,
                     output_summary=output,
                     status=status,
                     duration_ms=duration_ms,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    cost_usd=cost_usd,
                 ),
             )
 
@@ -170,26 +217,33 @@ class RunService:
                 )
                 return self.store.get_run(run_id)
 
-            agent_result = self.agent_factory(case, workspace).run(case, workspace, budget)
-            for agent_step in agent_result.steps:
+            architecture_result = self.architecture_factory(
+                architecture, case, workspace
+            ).run(
+                case,
+                workspace,
+                budget,
+                RunContext(run_id=run_id),
+            )
+            for architecture_step in architecture_result.steps:
                 sequence += 1
                 self.store.append_step(
                     run_id,
-                    agent_step.model_copy(update={"sequence": sequence}),
+                    architecture_step.model_copy(update={"sequence": sequence}),
                 )
 
-            if agent_result.status in {
+            if architecture_result.status in {
                 RunStatus.BUDGET_EXHAUSTED,
                 RunStatus.TIMED_OUT,
                 RunStatus.FAILED,
             }:
                 self.store.finish_run(
                     run_id,
-                    agent_result.status,
-                    agent_result.stop_reason,
+                    architecture_result.status,
+                    architecture_result.stop_reason,
                     functional_success=False,
                     review_status="skipped",
-                    review_reasons=[agent_result.stop_reason],
+                    review_reasons=[architecture_result.stop_reason],
                 )
                 return self.store.get_run(run_id)
 
@@ -232,6 +286,10 @@ class RunService:
                 json.dumps(review.model_dump(), ensure_ascii=False),
                 review.status,
                 "deterministic gates and advisory review",
+                role="reviewer",
+                input_tokens=review.usage.input_tokens,
+                output_tokens=review.usage.output_tokens,
+                cost_usd=review.usage.cost_usd,
             )
             terminal_status = RunStatus.SUCCEEDED if review.functional_success else RunStatus.FAILED
             stop_reason = (

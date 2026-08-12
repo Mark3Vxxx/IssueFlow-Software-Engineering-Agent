@@ -6,6 +6,7 @@ import pytest
 from pydantic import SecretStr
 from streamlit.testing.v1 import AppTest
 
+from issueflow.architectures.base import ArchitectureKind
 from issueflow.benchmark import load_catalog
 from issueflow.budget import budget_for_case
 from issueflow.config import Settings
@@ -183,6 +184,9 @@ def test_run_view_aggregates_efficiency_metrics_from_persisted_steps():
         "output_tokens": 50,
         "cost_usd": 0.00003,
     }
+    assert view.architecture_label == "Single Agent"
+    assert view.role_call_counts == {"single_agent": 2}
+    assert view.route_count == 0
 
 
 def test_run_view_builds_a_redacted_human_readable_timeline():
@@ -236,6 +240,49 @@ def test_run_view_builds_a_redacted_human_readable_timeline():
     assert "sk-private-token" not in repr(view)
 
 
+def test_run_view_does_not_count_skipped_review_or_failed_route_as_calls():
+    trace = {
+        "run": {
+            "architecture": "dynamic",
+            "status": "failed",
+            "review_status": "skipped",
+            "review_reasons": [],
+        },
+        "steps": [
+            {
+                "sequence": 1,
+                "role": "supervisor",
+                "step_type": "model",
+                "input_summary": "bounded workflow state",
+                "output_summary": "invalid supervisor output",
+                "status": "failed",
+                "duration_ms": 0,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "cost_usd": 0.00001,
+            },
+            {
+                "sequence": 2,
+                "role": "reviewer",
+                "step_type": "review",
+                "input_summary": "deterministic gates",
+                "output_summary": "skipped",
+                "status": "skipped",
+                "duration_ms": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cost_usd": 0.0,
+            },
+        ],
+        "artifacts": [],
+    }
+
+    view = make_run_view(trace)
+
+    assert view.role_call_counts == {"supervisor": 1}
+    assert view.route_count == 0
+
+
 def test_run_session_prevents_parallel_runs_and_returns_the_finished_record():
     entered = Event()
     release = Event()
@@ -247,7 +294,13 @@ def test_run_session_prevents_parallel_runs_and_returns_the_finished_record():
     )
 
     class BlockingService:
-        def start(self, case_id: str, budget: Budget) -> RunRecord:
+        def start(
+            self,
+            case_id: str,
+            budget: Budget,
+            architecture: ArchitectureKind,
+        ) -> RunRecord:
+            assert architecture is ArchitectureKind.SINGLE
             entered.set()
             release.wait(timeout=1)
             return expected
@@ -284,7 +337,13 @@ def test_completed_run_stays_active_until_the_page_collects_its_result():
     )
 
     class ImmediateService:
-        def start(self, case_id: str, budget: Budget) -> RunRecord:
+        def start(
+            self,
+            case_id: str,
+            budget: Budget,
+            architecture: ArchitectureKind,
+        ) -> RunRecord:
+            assert architecture is ArchitectureKind.SINGLE
             return expected
 
     def immediate_submit(function, *args):
@@ -332,10 +391,17 @@ render_app(EmptyStore(), StaticService())
     app = AppTest.from_string(script).run()
 
     assert not app.exception
-    assert app.title[0].value == "IssueFlow 单 Agent 修复工作台"
+    assert app.title[0].value == "IssueFlow Agent 架构工作台"
     assert len(app.selectbox[0].options) == 5
     assert app.selectbox[0].options[0] == "historical-01 · 历史修复样本"
     assert app.selectbox[0].options[1] == "constructed-01 · 自建边界样本"
+    assert app.selectbox[1].options == [
+        "Direct",
+        "Single Agent",
+        "Fixed Multi-Agent",
+        "Dynamic Supervisor",
+    ]
+    assert app.selectbox[1].value == "Single Agent"
     assert app.button[0].label == "开始真实修复"
 
 
@@ -345,6 +411,7 @@ from concurrent.futures import Future
 from pathlib import Path
 
 from issueflow.benchmark import load_catalog
+from issueflow.architectures.base import ArchitectureKind
 from issueflow.models import RunRecord, RunStatus
 from issueflow.ui import render_app
 
@@ -352,8 +419,9 @@ from issueflow.ui import render_app
 class StaticService:
     catalog = load_catalog(Path("benchmarks/micrograd.yaml"))
 
-    def start(self, case_id, budget):
+    def start(self, case_id, budget, architecture):
         assert case_id == "historical-01"
+        assert architecture is ArchitectureKind.FIXED
         assert budget.max_tool_calls == 18
         assert budget.max_patch_attempts == 4
         assert budget.max_seconds == 450
@@ -374,6 +442,7 @@ class StaticStore:
             "run": {
                 "id": run_id,
                 "case_id": "historical-01",
+                "architecture": "fixed",
                 "status": "succeeded",
                 "stop_reason": "functional_success",
                 "functional_success": True,
@@ -383,6 +452,18 @@ class StaticStore:
             "steps": [
                 {
                     "sequence": 1,
+                    "role": "planner",
+                    "step_type": "role",
+                    "input_summary": "bounded workflow state",
+                    "output_summary": "plan complete",
+                    "status": "completed",
+                    "duration_ms": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "cost_usd": 0.0,
+                },
+                {
+                    "sequence": 2,
                     "role": "single_agent",
                     "step_type": "verification",
                     "input_summary": "python -c assertion",
@@ -394,7 +475,7 @@ class StaticStore:
                     "cost_usd": 0.00003,
                 },
                 {
-                    "sequence": 2,
+                    "sequence": 3,
                     "role": "single_agent",
                     "step_type": "diff",
                     "input_summary": "git diff --binary HEAD",
@@ -431,13 +512,17 @@ render_app(StaticStore(), StaticService(), submit=immediate_submit)
         )
         for caption in app.caption
     )
+    app.selectbox[1].select("Fixed Multi-Agent").run()
     app.button[0].click().run()
 
     assert not app.exception
     assert app.success[0].value == "功能验证通过"
+    assert any(markdown.value == "**Agent 架构：** Fixed Multi-Agent" for markdown in app.markdown)
+    assert any(markdown.value == "**角色调用：** planner × 1" for markdown in app.markdown)
     assert [(metric.label, metric.value) for metric in app.metric] == [
         ("总耗时", "0.04 秒"),
         ("工具调用", "0"),
+        ("路由次数", "1"),
         ("输入 Token", "180"),
         ("输出 Token", "50"),
         ("估算成本", "$0.000030"),
@@ -459,7 +544,7 @@ from issueflow.ui import render_app
 class StaticService:
     catalog = load_catalog(Path("benchmarks/micrograd.yaml"))
 
-    def start(self, case_id, budget):
+    def start(self, case_id, budget, architecture):
         return RunRecord(
             id="run-budget",
             case_id=case_id,
@@ -521,7 +606,8 @@ def test_runtime_wires_each_cases_registered_commands_into_its_agent(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
 
-    agent = service.agent_factory(case, workspace)
+    runner = service.architecture_factory(ArchitectureKind.SINGLE, case, workspace)
+    agent = runner.agent
 
     assert store.database_path == tmp_path / "data" / "issueflow.sqlite3"
     assert agent.model.test_commands == (case.reproduce_command,)

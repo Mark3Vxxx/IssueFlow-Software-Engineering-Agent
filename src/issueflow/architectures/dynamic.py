@@ -236,7 +236,7 @@ class DynamicSupervisorArchitecture:
                 TraceStep(
                     sequence=len(steps) + 1,
                     role=RoleName.SUPERVISOR,
-                    step_type="route",
+                    step_type="route" if decision is not None else "model",
                     input_summary="bounded workflow state and remaining budget",
                     output_summary=summary,
                     status=status,

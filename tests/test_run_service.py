@@ -2,11 +2,19 @@ from collections import deque
 from pathlib import Path
 from subprocess import run
 
+from pydantic import BaseModel
+
 from issueflow.agent import AgentResult
-from issueflow.models import BenchmarkCase, Budget, RunStatus, TraceStep
+from issueflow.architectures.base import (
+    ArchitectureKind,
+    ArchitectureResult,
+    RunContext,
+)
+from issueflow.models import BenchmarkCase, Budget, RunStatus, TraceStep, Usage
 from issueflow.reviewer import Reviewer
 from issueflow.run_service import GitWorkspacePreparer, RunService
 from issueflow.sandbox import SandboxResult
+from issueflow.structured_model import StructuredCompletion
 from issueflow.trace_store import TraceStore
 
 
@@ -127,8 +135,23 @@ class BudgetExhaustedAgent:
 
 
 class NeedsChangesModel:
-    def review(self, issue: str, diff_text: str) -> str:
-        return '{"status":"needs_changes","reasons":["Prefer a smaller diff."]}'
+    def review(self, issue: str, diff_text: str):
+        class Payload(BaseModel):
+            status: str
+            reasons: list[str]
+
+        return StructuredCompletion(
+            value=Payload(
+                status="needs_changes",
+                reasons=["Prefer a smaller diff."],
+            ),
+            usage=Usage(
+                model_calls=1,
+                input_tokens=37,
+                output_tokens=11,
+                cost_usd=0.00004,
+            ),
+        )
 
 
 def test_successful_run_persists_full_evidence_and_advisory_review(tmp_path):
@@ -165,6 +188,73 @@ def test_successful_run_persists_full_evidence_and_advisory_review(tmp_path):
     ]
     assert exported["steps"][0]["duration_ms"] == 5
     assert exported["steps"][2]["duration_ms"] == 5
+    assert exported["steps"][-1]["input_tokens"] == 37
+    assert exported["steps"][-1]["output_tokens"] == 11
+    assert exported["steps"][-1]["cost_usd"] == 0.00004
+
+
+def test_default_and_explicit_architectures_are_persisted_with_the_same_budget(tmp_path):
+    case = make_case()
+    budget = make_budget()
+    store = TraceStore(tmp_path / "issueflow.sqlite3")
+    requested: list[tuple[ArchitectureKind, BenchmarkCase, Path]] = []
+    received_budgets: list[Budget] = []
+
+    class RepairArchitecture:
+        def __init__(self, kind: ArchitectureKind) -> None:
+            self.kind = kind
+
+        def run(
+            self,
+            selected_case: BenchmarkCase,
+            workspace: Path,
+            selected_budget: Budget,
+            context: RunContext,
+        ) -> ArchitectureResult:
+            received_budgets.append(selected_budget)
+            (workspace / "engine.py").write_text("return 'fixed'\n", encoding="utf-8")
+            return ArchitectureResult(
+                architecture=self.kind,
+                status=RunStatus.SUCCEEDED,
+                stop_reason="repair_complete",
+                steps=[
+                    TraceStep(
+                        sequence=1,
+                        role="coder",
+                        step_type="role",
+                        input_summary=context.run_id,
+                        output_summary="patch applied",
+                        status="completed",
+                    )
+                ],
+            )
+
+    def architecture_factory(kind, selected_case, workspace):
+        requested.append((kind, selected_case, workspace))
+        return RepairArchitecture(kind)
+
+    service = RunService(
+        catalog={case.id: case},
+        store=store,
+        workspace_preparer=LocalWorkspacePreparer(tmp_path / "workspaces"),
+        sandbox=SequenceSandbox([1, 0, 1, 0]),
+        architecture_factory=architecture_factory,
+        reviewer=Reviewer(),
+    )
+
+    default_run = service.start(case.id, budget)
+    fixed_run = service.start(case.id, budget, ArchitectureKind.FIXED)
+
+    assert default_run.architecture == "single"
+    assert fixed_run.architecture == "fixed"
+    assert [item[0] for item in requested] == [
+        ArchitectureKind.SINGLE,
+        ArchitectureKind.FIXED,
+    ]
+    assert received_budgets == [budget, budget]
+    assert [step["step_type"] for step in store.export_json(fixed_run.id)["steps"]].count(
+        "role"
+    ) == 1
 
 
 def test_budget_exhaustion_is_terminal_and_persisted(tmp_path):

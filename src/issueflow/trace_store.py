@@ -38,6 +38,7 @@ class TraceStore:
                 CREATE TABLE IF NOT EXISTS runs (
                     id TEXT PRIMARY KEY,
                     case_id TEXT NOT NULL,
+                    architecture TEXT NOT NULL DEFAULT 'single',
                     status TEXT NOT NULL,
                     stop_reason TEXT,
                     functional_success INTEGER,
@@ -65,6 +66,7 @@ class TraceStore:
             if "stop_reason" not in columns:
                 connection.execute("ALTER TABLE runs ADD COLUMN stop_reason TEXT")
             for name, definition in {
+                "architecture": "TEXT NOT NULL DEFAULT 'single'",
                 "functional_success": "INTEGER",
                 "review_status": "TEXT",
                 "review_reasons": "TEXT NOT NULL DEFAULT '[]'",
@@ -87,8 +89,11 @@ class TraceStore:
         """Create the top-level record before any trace step is written."""
         with self._connect() as connection:
             connection.execute(
-                "INSERT INTO runs (id, case_id, status) VALUES (?, ?, ?)",
-                (record.id, record.case_id, record.status.value),
+                """
+                INSERT INTO runs (id, case_id, architecture, status)
+                VALUES (?, ?, ?, ?)
+                """,
+                (record.id, record.case_id, record.architecture, record.status.value),
             )
 
     def append_step(self, run_id: str, step: TraceStep) -> None:
@@ -168,7 +173,7 @@ class TraceStore:
         with self._connect() as connection:
             row = connection.execute(
                 """
-                SELECT id, case_id, status, stop_reason, functional_success,
+                SELECT id, case_id, architecture, status, stop_reason, functional_success,
                        review_status, review_reasons
                 FROM runs WHERE id = ?
                 """,
@@ -179,11 +184,12 @@ class TraceStore:
         return RunRecord(
             id=row[0],
             case_id=row[1],
-            status=RunStatus(row[2]),
-            stop_reason=row[3],
-            functional_success=None if row[4] is None else bool(row[4]),
-            review_status=row[5],
-            review_reasons=json.loads(row[6]),
+            architecture=row[2],
+            status=RunStatus(row[3]),
+            stop_reason=row[4],
+            functional_success=None if row[5] is None else bool(row[5]),
+            review_status=row[6],
+            review_reasons=json.loads(row[7]),
         )
 
     def export_json(self, run_id: str) -> dict[str, object]:
@@ -191,7 +197,7 @@ class TraceStore:
         with self._connect() as connection:
             run = connection.execute(
                 """
-                SELECT id, case_id, status, stop_reason, functional_success,
+                SELECT id, case_id, architecture, status, stop_reason, functional_success,
                        review_status, review_reasons
                 FROM runs WHERE id = ?
                 """,
@@ -211,11 +217,12 @@ class TraceStore:
             "run": {
                 "id": run[0],
                 "case_id": run[1],
-                "status": run[2],
-                "stop_reason": run[3],
-                "functional_success": None if run[4] is None else bool(run[4]),
-                "review_status": run[5],
-                "review_reasons": json.loads(run[6]),
+                "architecture": run[2],
+                "status": run[3],
+                "stop_reason": run[4],
+                "functional_success": None if run[5] is None else bool(run[5]),
+                "review_status": run[6],
+                "review_reasons": json.loads(run[7]),
             },
             "steps": [
                 {

@@ -412,6 +412,7 @@ def test_dynamic_normalizes_supervisor_protocol_failure_without_leaking_details(
     assert result.usage.model_calls == 1
     assert result.usage.input_tokens == 7
     assert result.role_usage[RoleName.SUPERVISOR].output_tokens == 3
+    assert result.steps[0].step_type == "model"
     assert secret not in result.model_dump_json()
     assert all(script.calls == 0 for script in scripts.values())
 
@@ -451,6 +452,7 @@ def test_dynamic_preserves_usage_from_malformed_supervisor_decision(
     assert result.role_usage[RoleName.SUPERVISOR].input_tokens == 31
     assert result.role_usage[RoleName.SUPERVISOR].output_tokens == 17
     assert result.role_usage[RoleName.SUPERVISOR].cost_usd == 0.25
+    assert result.steps[0].step_type == "model"
     assert all(script.calls == 0 for script in scripts.values())
 
 

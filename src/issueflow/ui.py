@@ -10,7 +10,9 @@ from typing import Protocol
 
 import streamlit as st
 
-from issueflow.agent import DeepSeekModelClient, SingleAgent, ToolExecutor
+from issueflow.agent import DeepSeekModelClient
+from issueflow.architectures.base import ArchitectureKind
+from issueflow.architectures.factory import ArchitectureFactory
 from issueflow.benchmark import load_catalog
 from issueflow.budget import budget_for_case
 from issueflow.config import Settings
@@ -18,7 +20,15 @@ from issueflow.models import BenchmarkCase, Budget, RunRecord
 from issueflow.reviewer import DeepSeekReviewClient, Reviewer
 from issueflow.run_service import GitWorkspacePreparer, RunService
 from issueflow.sandbox import DockerSandbox
+from issueflow.structured_model import DeepSeekStructuredModel
 from issueflow.trace_store import TraceStore, redact
+
+ARCHITECTURE_LABELS = {
+    ArchitectureKind.DIRECT: "Direct",
+    ArchitectureKind.SINGLE: "Single Agent",
+    ArchitectureKind.FIXED: "Fixed Multi-Agent",
+    ArchitectureKind.DYNAMIC: "Dynamic Supervisor",
+}
 
 STATUS_LABELS = {
     "queued": "排队中",
@@ -57,7 +67,12 @@ def format_budget_summary(case: BenchmarkCase, budget: Budget) -> str:
 class RunStarter(Protocol):
     """Service boundary used by the asynchronous UI session."""
 
-    def start(self, case_id: str, budget: Budget) -> RunRecord: ...
+    def start(
+        self,
+        case_id: str,
+        budget: Budget,
+        architecture: ArchitectureKind = ArchitectureKind.SINGLE,
+    ) -> RunRecord: ...
 
 
 SubmitRun = Callable[..., Future[RunRecord]]
@@ -76,11 +91,16 @@ class RunSession:
         """Whether a submitted benchmark still occupies this browser session."""
         return self._future is not None
 
-    def start(self, case_id: str, budget: Budget) -> None:
+    def start(
+        self,
+        case_id: str,
+        budget: Budget,
+        architecture: ArchitectureKind = ArchitectureKind.SINGLE,
+    ) -> None:
         """Submit one run and reject accidental parallel starts."""
         if self._future is not None:
             raise RuntimeError("a benchmark is already running")
-        self._future = self.submit(self.service.start, case_id, budget)
+        self._future = self.submit(self.service.start, case_id, budget, architecture)
 
     def poll(self) -> RunRecord | None:
         """Return and clear a completed result without blocking the page."""
@@ -124,6 +144,9 @@ class RunView:
     stop_reason_label: str
     review_status: str
     review_reasons: tuple[str, ...]
+    architecture_label: str
+    role_call_counts: dict[str, int]
+    route_count: int
     metrics: dict[str, int | float]
     timeline: tuple[TimelineItem, ...]
     diff_text: str
@@ -170,6 +193,19 @@ def make_run_view(trace: dict[str, object]) -> RunView:
     review_reasons = run.get("review_reasons", [])
     if not isinstance(review_reasons, list):
         raise TypeError("review reasons must be a list")
+    architecture = ArchitectureKind(str(run.get("architecture") or "single"))
+    role_call_counts: dict[str, int] = {}
+    for step in steps:
+        role = str(step["role"])
+        step_type = str(step["step_type"])
+        is_role_call = step_type in {"role", "route", "model", "review"}
+        if step_type == "review" and str(step["status"]) == "skipped":
+            is_role_call = False
+        if architecture is ArchitectureKind.SINGLE and role == "single_agent":
+            is_role_call = step_type in {"tool", "model"}
+        if is_role_call and role != "system":
+            role_call_counts[role] = role_call_counts.get(role, 0) + 1
+    route_step_type = "role" if architecture is ArchitectureKind.FIXED else "route"
     return RunView(
         status_label=STATUS_LABELS.get(str(run.get("status")), str(run.get("status"))),
         functional_success=run.get("functional_success"),
@@ -177,6 +213,9 @@ def make_run_view(trace: dict[str, object]) -> RunView:
         stop_reason_label=describe_stop_reason(str(run.get("stop_reason") or "")),
         review_status=str(run.get("review_status") or "未审查"),
         review_reasons=tuple(redact(str(reason)) for reason in review_reasons),
+        architecture_label=ARCHITECTURE_LABELS[architecture],
+        role_call_counts=role_call_counts,
+        route_count=sum(str(step["step_type"]) == route_step_type for step in steps),
         metrics={
             "duration_ms": sum(int(step["duration_ms"]) for step in steps),
             "tool_calls": sum(step["step_type"] == "tool" for step in steps),
@@ -237,9 +276,19 @@ def render_app(
         )
     run_session = st.session_state.issueflow_run_session
 
-    st.title("IssueFlow 单 Agent 修复工作台")
-    st.caption("选择一个固定 Benchmark，观察 Agent 如何复现、定位、修改并独立验证。")
+    st.title("IssueFlow Agent 架构工作台")
+    st.caption("选择一个固定 Benchmark 和 Agent 架构，观察修复与独立验证。")
     selected_label = st.selectbox("选择案例", list(case_views))
+    selected_architecture_label = st.selectbox(
+        "选择 Agent 架构",
+        list(ARCHITECTURE_LABELS.values()),
+        index=1,
+    )
+    selected_architecture = next(
+        kind
+        for kind, label in ARCHITECTURE_LABELS.items()
+        if label == selected_architecture_label
+    )
     selected = case_views[selected_label]
     selected_case = catalog[selected.id]
     selected_budget = budget_for_case(selected_case)
@@ -252,7 +301,7 @@ def render_app(
     if st.button("开始真实修复", type="primary", disabled=run_session.is_running):
         st.session_state.pop("issueflow_run_id", None)
         st.session_state.pop("issueflow_run_error", None)
-        run_session.start(selected.id, selected_budget)
+        run_session.start(selected.id, selected_budget, selected_architecture)
 
     @st.fragment(run_every=2 if run_session.is_running else None)
     def render_run_panel() -> None:
@@ -286,13 +335,20 @@ def _render_finished_run(store: object, run_id: str) -> None:
         st.error(f"运行结束：{view.status_label}")
         st.warning(f"停止原因：{view.stop_reason_label}")
 
+    st.markdown(f"**Agent 架构：** {view.architecture_label}")
+    role_calls = " · ".join(
+        f"{role} × {count}" for role, count in sorted(view.role_call_counts.items())
+    )
+    st.markdown(f"**角色调用：** {role_calls or '无'}")
+
     duration_seconds = float(view.metrics["duration_ms"]) / 1_000
-    columns = st.columns(5)
+    columns = st.columns(6)
     columns[0].metric("总耗时", f"{duration_seconds:.2f} 秒")
     columns[1].metric("工具调用", str(view.metrics["tool_calls"]))
-    columns[2].metric("输入 Token", str(view.metrics["input_tokens"]))
-    columns[3].metric("输出 Token", str(view.metrics["output_tokens"]))
-    columns[4].metric("估算成本", f"${float(view.metrics['cost_usd']):.6f}")
+    columns[2].metric("路由次数", str(view.route_count))
+    columns[3].metric("输入 Token", str(view.metrics["input_tokens"]))
+    columns[4].metric("输出 Token", str(view.metrics["output_tokens"]))
+    columns[5].metric("估算成本", f"${float(view.metrics['cost_usd']):.6f}")
 
     st.subheader("代码改动")
     if view.diff_text:
@@ -333,16 +389,26 @@ def build_runtime(
     sandbox = DockerSandbox()
     api_key = settings.api_key.get_secret_value()
 
-    def agent_factory(case: BenchmarkCase, workspace: Path) -> SingleAgent:
+    def single_model_factory(case: BenchmarkCase) -> DeepSeekModelClient:
         commands = tuple(dict.fromkeys((case.reproduce_command, case.verify_command)))
-        model = DeepSeekModelClient(
+        return DeepSeekModelClient(
             api_key=api_key,
             model=settings.model,
             base_url=settings.base_url,
             test_commands=commands,
             temperature=settings.temperature,
         )
-        return SingleAgent(model, ToolExecutor(workspace, case, sandbox))
+
+    architecture_factory = ArchitectureFactory(
+        single_model_factory=single_model_factory,
+        structured_model=DeepSeekStructuredModel(
+            api_key=api_key,
+            model=settings.model,
+            base_url=settings.base_url,
+            temperature=settings.temperature,
+        ),
+        sandbox=sandbox,
+    )
 
     service = RunService(
         catalog=catalog,
@@ -352,7 +418,7 @@ def build_runtime(
             project_root / "benchmarks",
         ),
         sandbox=sandbox,
-        agent_factory=agent_factory,
+        architecture_factory=architecture_factory.create,
         reviewer=Reviewer(
             DeepSeekReviewClient(
                 api_key=api_key,
@@ -377,7 +443,7 @@ def main() -> None:
     try:
         settings = Settings.from_env()
     except KeyError:
-        st.title("IssueFlow 单 Agent 修复工作台")
+        st.title("IssueFlow Agent 架构工作台")
         st.warning("请先在终端设置 DEEPSEEK_API_KEY，然后重新启动工作台。")
         return
     store, service = build_runtime(project_root, data_root, settings)

@@ -116,3 +116,41 @@ def test_finish_run_redacts_reviewer_reasons(store, run_record):
 
     exported = store.export_json(run_record.id)
     assert exported["run"]["review_reasons"] == ["[REDACTED]"]
+
+
+def test_existing_database_migrates_architecture_with_safe_single_default(tmp_path):
+    database_path = tmp_path / "legacy.sqlite3"
+    with sqlite3.connect(database_path) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE runs (
+                id TEXT PRIMARY KEY,
+                case_id TEXT NOT NULL,
+                status TEXT NOT NULL
+            );
+            INSERT INTO runs (id, case_id, status)
+            VALUES ('legacy-run', 'historical-01', 'queued');
+            """
+        )
+
+    migrated = TraceStore(database_path)
+
+    with sqlite3.connect(database_path) as connection:
+        columns = connection.execute("PRAGMA table_info(runs)").fetchall()
+    architecture_column = next(column for column in columns if column[1] == "architecture")
+    assert architecture_column[2:5] == ("TEXT", 1, "'single'")
+    assert migrated.get_run("legacy-run").architecture == "single"
+    assert migrated.export_json("legacy-run")["run"]["architecture"] == "single"
+
+
+def test_new_run_json_includes_selected_architecture(store):
+    record = RunRecord(
+        id="run-fixed",
+        case_id="historical-01",
+        architecture="fixed",
+    )
+
+    store.create_run(record)
+
+    assert store.get_run(record.id).architecture == "fixed"
+    assert store.export_json(record.id)["run"]["architecture"] == "fixed"

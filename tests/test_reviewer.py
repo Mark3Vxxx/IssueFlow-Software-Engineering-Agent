@@ -1,23 +1,38 @@
 import json
 
 import httpx
+from pydantic import BaseModel
 
+from issueflow.models import Usage
 from issueflow.reviewer import DeepSeekReviewClient, Reviewer
+from issueflow.structured_model import ModelProtocolError, StructuredCompletion
+
+
+class AdvisoryPayload(BaseModel):
+    status: str
+    reasons: list[str]
 
 
 class StaticReviewModel:
-    def __init__(self, response: str) -> None:
+    def __init__(self, response: str, usage: Usage | None = None) -> None:
         self.response = response
+        self.usage = usage or Usage(model_calls=1)
         self.calls = 0
 
-    def review(self, issue: str, diff_text: str) -> str:
+    def review(self, issue: str, diff_text: str):
         self.calls += 1
-        return self.response
+        return StructuredCompletion(
+            value=AdvisoryPayload.model_validate_json(self.response),
+            usage=self.usage,
+        )
 
 
 class FailingReviewModel:
-    def review(self, issue: str, diff_text: str) -> str:
-        raise httpx.ConnectError("review service unavailable")
+    def review(self, issue: str, diff_text: str):
+        raise ModelProtocolError(
+            "reviewer_request_failed",
+            Usage(model_calls=1, input_tokens=7, cost_usd=0.00001),
+        )
 
 
 def test_functional_success_requires_all_deterministic_evidence():
@@ -68,7 +83,14 @@ def test_llm_rejection_does_not_override_functional_success():
 
 
 def test_invalid_reviewer_json_is_failed_without_losing_functional_success():
-    reviewer = Reviewer(review_model=StaticReviewModel("not-json"))
+    class InvalidReviewModel:
+        def review(self, issue: str, diff_text: str):
+            raise ModelProtocolError(
+                "invalid_reviewer_response",
+                Usage(model_calls=1, input_tokens=19, output_tokens=3, cost_usd=0.00002),
+            )
+
+    reviewer = Reviewer(review_model=InvalidReviewModel())
 
     result = reviewer.evaluate(
         issue="Unary negation returns the wrong value.",
@@ -81,6 +103,12 @@ def test_invalid_reviewer_json_is_failed_without_losing_functional_success():
     assert result.functional_success is True
     assert result.status == "failed"
     assert result.reasons == ["invalid_reviewer_response"]
+    assert result.usage == Usage(
+        model_calls=1,
+        input_tokens=19,
+        output_tokens=3,
+        cost_usd=0.00002,
+    )
 
 
 def test_deepseek_review_client_requests_structured_json():
@@ -106,9 +134,10 @@ def test_deepseek_review_client_requests_structured_json():
         http_client=httpx.Client(transport=httpx.MockTransport(handler)),
     )
 
-    response = client.review("Negation is broken", "diff --git a/a.py b/a.py")
+    completion = client.review("Negation is broken", "diff --git a/a.py b/a.py")
 
-    assert json.loads(response)["status"] == "approved"
+    assert completion.value.status == "approved"
+    assert completion.usage.model_calls == 1
 
 
 def test_reviewer_network_failure_does_not_override_functional_success():
@@ -125,3 +154,5 @@ def test_reviewer_network_failure_does_not_override_functional_success():
     assert result.functional_success is True
     assert result.status == "failed"
     assert result.reasons == ["reviewer_request_failed"]
+    assert result.usage.input_tokens == 7
+    assert result.usage.cost_usd == 0.00001
