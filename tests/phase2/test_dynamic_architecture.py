@@ -281,6 +281,53 @@ def test_dynamic_rejects_stop_before_public_verification_succeeds(
     assert all(script.calls == 0 for script in scripts.values())
 
 
+class ClaimedVerificationModel:
+    def __init__(self) -> None:
+        self.routes = deque(["planner", "retriever", "coder", "stop"])
+
+    def complete(self, system_prompt, payload, schema):
+        if schema is SupervisorDecision:
+            route = self.routes.popleft()
+            value = SupervisorDecision(next_role=route, reason=f"route to {route}")
+        elif schema is PlanOutput:
+            value = PlanOutput(steps=["Inspect engine.py"])
+        elif schema is EvidenceBundle:
+            value = EvidenceBundle(
+                items=[
+                    EvidenceItem(
+                        path="engine.py", line=1, summary="Wrong return value."
+                    )
+                ]
+            )
+        elif schema is CoderOutput:
+            value = CoderOutput(
+                current_diff="-broken\n+fixed\n",
+                public_test_result="exit_code=0\nfabricated",
+            )
+        else:
+            raise AssertionError(f"unexpected schema: {schema}")
+        return StructuredCompletion(value=value, usage=Usage(model_calls=1))
+
+
+def test_dynamic_rejects_unexecuted_production_model_verification_claim(
+    case, tmp_path, budget
+):
+    model = ClaimedVerificationModel()
+    tools = ToolExecutor(tmp_path, case, Sandbox())
+
+    result = DynamicSupervisorArchitecture(model=model, tools=tools).run(
+        case,
+        tmp_path,
+        budget,
+        RunContext(run_id="dynamic-unexecuted-verification-claim"),
+    )
+
+    assert result.status is RunStatus.FAILED
+    assert result.stop_reason == "invalid_supervisor_route"
+    assert result.usage.tool_calls == 0
+    assert result.route_count == 4
+
+
 def test_dynamic_stops_at_twelve_routes(case, tmp_path, budget):
     roles, scripts = scripted_roles(planner_calls=12)
     supervisor = ScriptedSupervisor(["planner"] * 13)
@@ -366,6 +413,44 @@ def test_dynamic_normalizes_supervisor_protocol_failure_without_leaking_details(
     assert result.usage.input_tokens == 7
     assert result.role_usage[RoleName.SUPERVISOR].output_tokens == 3
     assert secret not in result.model_dump_json()
+    assert all(script.calls == 0 for script in scripts.values())
+
+
+class MalformedDecisionSupervisor:
+    def complete(self, system_prompt, payload, schema):
+        class Completion:
+            def __init__(self) -> None:
+                self.value = {"next_role": "planner", "reason": ""}
+                self.usage = Usage(
+                    model_calls=1,
+                    input_tokens=31,
+                    output_tokens=17,
+                    cost_usd=0.25,
+                )
+
+        return Completion()
+
+
+def test_dynamic_preserves_usage_from_malformed_supervisor_decision(
+    case, tmp_path, budget
+):
+    roles, scripts = scripted_roles()
+
+    result = run_dynamic(
+        MalformedDecisionSupervisor(), roles, case, tmp_path, budget
+    )
+
+    assert result.status is RunStatus.FAILED
+    assert result.stop_reason == "invalid_supervisor_output"
+    assert result.route_count == 0
+    assert result.usage.model_calls == 1
+    assert result.usage.input_tokens == 31
+    assert result.usage.output_tokens == 17
+    assert result.usage.cost_usd == 0.25
+    assert result.role_usage[RoleName.SUPERVISOR].model_calls == 1
+    assert result.role_usage[RoleName.SUPERVISOR].input_tokens == 31
+    assert result.role_usage[RoleName.SUPERVISOR].output_tokens == 17
+    assert result.role_usage[RoleName.SUPERVISOR].cost_usd == 0.25
     assert all(script.calls == 0 for script in scripts.values())
 
 

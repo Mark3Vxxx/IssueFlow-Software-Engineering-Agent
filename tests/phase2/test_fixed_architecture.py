@@ -348,6 +348,49 @@ def test_production_roles_use_only_their_allowlisted_tool_executor_boundary(case
     assert target.read_text(encoding="utf-8") == "return 'fixed'\n"
 
 
+class ClaimedPublicTestModel:
+    def complete(self, system_prompt, payload, schema):
+        assert schema is CoderOutput
+        return StructuredCompletion(
+            value=CoderOutput(
+                current_diff="-broken\n+fixed\n",
+                public_test_result="exit_code=0\nfabricated",
+            ),
+            usage=Usage(model_calls=1),
+        )
+
+
+def test_production_coder_ignores_unexecuted_model_test_claim(case, tmp_path):
+    roles = RoleSet.production(
+        ClaimedPublicTestModel(), ToolExecutor(tmp_path, case, Sandbox())
+    )
+    state = validate_workflow_state(
+        {
+            "case_id": case.id,
+            "issue": case.issue,
+            "plan": PlanOutput(steps=["Repair engine.py"]),
+            "evidence": [
+                EvidenceItem(path="engine.py", line=1, summary="Wrong return value.")
+            ],
+            "current_diff": "",
+            "public_test_result": "",
+            "review_feedback": None,
+            "usage": Usage(),
+            "role_usage": {},
+            "role_history": [],
+            "rework_count": 0,
+            "route_count": 0,
+            "stop_reason": None,
+        }
+    )
+
+    update, _ = roles.code(state)
+
+    assert update["public_test_result"] == ""
+    assert update["usage"].model_calls == 1
+    assert update["usage"].tool_calls == 0
+
+
 class ToolHeavyModel:
     def complete(self, system_prompt, payload, schema):
         if schema is PlanOutput:

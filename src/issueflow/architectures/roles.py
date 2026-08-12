@@ -228,7 +228,7 @@ class _ProductionRoles:
         if isinstance(completion, _RoleFailure):
             return completion.update, completion.step
         output, usage = completion
-        public_test_result = output.public_test_result
+        public_test_result = ""
         stop_reason = self._budget_reason(state, usage)
         for call in output.tool_calls:
             if stop_reason is not None:

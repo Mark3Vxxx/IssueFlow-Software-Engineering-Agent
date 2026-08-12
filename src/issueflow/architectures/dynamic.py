@@ -169,19 +169,19 @@ class DynamicSupervisorArchitecture:
             supervisor_started_seconds = elapsed
             decision: SupervisorDecision | None = None
             failure_reason: str | None = None
+            delta = Usage(model_calls=1)
             try:
                 completion = self.model.complete(
                     SUPERVISOR_PROMPT,
                     _supervisor_payload(state, budget, elapsed),
                     SupervisorDecision,
                 )
-                decision = SupervisorDecision.model_validate(completion.value)
                 delta = _model_usage(Usage.model_validate(completion.usage))
+                decision = SupervisorDecision.model_validate(completion.value)
             except ModelProtocolError as error:
                 delta = _model_usage(error.usage)
                 failure_reason = "model_protocol_failure"
             except (AttributeError, TypeError, ValidationError, ValueError):
-                delta = Usage(model_calls=1)
                 failure_reason = "invalid_supervisor_output"
 
             supervisor_finished_seconds = elapsed_seconds()
