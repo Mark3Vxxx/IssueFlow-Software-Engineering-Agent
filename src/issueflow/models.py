@@ -51,6 +51,7 @@ class BenchmarkCase(BaseModel):
 
     id: str
     kind: Literal["historical", "constructed"]
+    budget_profile: Literal["small", "medium", "large"]
     repository_url: str
     revision: str = Field(pattern=r"^[0-9a-f]{40}$")
     license: str

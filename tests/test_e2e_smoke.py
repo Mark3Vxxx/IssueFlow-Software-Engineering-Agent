@@ -92,6 +92,7 @@ def _make_local_benchmark(tmp_path: Path) -> tuple[BenchmarkCase, Path]:
     case = BenchmarkCase(
         id="constructed-e2e",
         kind="constructed",
+        budget_profile="small",
         repository_url=str(source),
         revision=revision,
         license="MIT",

@@ -1,6 +1,7 @@
 cases:
   - id: historical-01
     kind: historical
+    budget_profile: medium
     repository_url: https://github.com/karpathy/micrograd
     revision: 36fab1a79ec47fd19fe2a90dcea772d58bfea072
     license: MIT
@@ -14,6 +15,7 @@ cases:
     construction_notes: Historical code repair from commit 9fd9cc0; the reproduction uses a public shared-graph regression assertion.
   - id: constructed-01
     kind: constructed
+    budget_profile: small
     repository_url: https://github.com/karpathy/micrograd
     revision: 7bc720e951fe422b8f8814aa5aa1b64121d26b4c
     license: MIT
@@ -26,6 +28,7 @@ cases:
     construction_notes: Changes only Value.__neg__; it models a one-line arithmetic regression with an observable result.
   - id: constructed-02
     kind: constructed
+    budget_profile: small
     repository_url: https://github.com/karpathy/micrograd
     revision: 7bc720e951fe422b8f8814aa5aa1b64121d26b4c
     license: MIT
@@ -38,6 +41,7 @@ cases:
     construction_notes: Removes only the local derivative multiplier in Value.__pow__.
   - id: constructed-03
     kind: constructed
+    budget_profile: small
     repository_url: https://github.com/karpathy/micrograd
     revision: 7bc720e951fe422b8f8814aa5aa1b64121d26b4c
     license: MIT
@@ -50,6 +54,7 @@ cases:
     construction_notes: Changes the ReLU boundary predicate only; no unrelated operator is modified.
   - id: constructed-04
     kind: constructed
+    budget_profile: small
     repository_url: https://github.com/karpathy/micrograd
     revision: 7bc720e951fe422b8f8814aa5aa1b64121d26b4c
     license: MIT

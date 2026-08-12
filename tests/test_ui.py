@@ -15,6 +15,7 @@ def test_case_view_distinguishes_constructed_samples_from_historical_repairs():
     case = BenchmarkCase(
         id="constructed-01",
         kind="constructed",
+        budget_profile="small",
         repository_url="https://github.com/karpathy/micrograd",
         revision="a" * 40,
         license="MIT",
@@ -37,6 +38,7 @@ def test_case_view_labels_historical_repairs_explicitly():
     case = BenchmarkCase(
         id="historical-01",
         kind="historical",
+        budget_profile="medium",
         repository_url="https://github.com/karpathy/micrograd",
         revision="a" * 40,
         license="MIT",
@@ -57,6 +59,7 @@ def test_case_view_translates_latest_run_status_for_the_workbench():
     case = BenchmarkCase(
         id="constructed-01",
         kind="constructed",
+        budget_profile="small",
         repository_url="https://github.com/karpathy/micrograd",
         revision="a" * 40,
         license="MIT",

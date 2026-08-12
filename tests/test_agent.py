@@ -44,6 +44,7 @@ def make_case() -> BenchmarkCase:
     return BenchmarkCase(
         id="constructed-01",
         kind="constructed",
+        budget_profile="small",
         repository_url="https://github.com/karpathy/micrograd",
         revision="a" * 40,
         license="MIT",

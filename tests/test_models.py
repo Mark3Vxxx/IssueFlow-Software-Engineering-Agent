@@ -4,6 +4,38 @@ from pydantic import ValidationError
 from issueflow.models import BenchmarkCase, Budget, RunRecord, RunStatus, TraceStep
 
 
+def valid_historical_case(**updates) -> dict[str, object]:
+    values = {
+        "id": "historical-01",
+        "kind": "historical",
+        "budget_profile": "medium",
+        "repository_url": "https://github.com/karpathy/micrograd",
+        "revision": "a" * 40,
+        "license": "MIT",
+        "issue": "Shared graphs leave gradients at zero.",
+        "source_url": "https://github.com/karpathy/micrograd/commit/fix",
+        "reproduce_command": "python -m pytest",
+        "verify_command": "python -m pytest",
+        "reference_patch": "patches/historical-01-fix.patch",
+        "construction_notes": "Historical public repair.",
+    }
+    values.update(updates)
+    return values
+
+
+def test_benchmark_case_requires_an_explicit_budget_profile():
+    values = valid_historical_case()
+    values.pop("budget_profile")
+
+    with pytest.raises(ValidationError, match="budget_profile"):
+        BenchmarkCase(**values)
+
+
+def test_benchmark_case_rejects_an_unknown_budget_profile():
+    with pytest.raises(ValidationError, match="budget_profile"):
+        BenchmarkCase(**valid_historical_case(budget_profile="unlimited"))
+
+
 def test_budget_rejects_zero_tool_limit():
     with pytest.raises(ValidationError):
         Budget(
@@ -28,6 +60,7 @@ def test_benchmark_case_requires_a_full_lowercase_git_sha():
         BenchmarkCase(
             id="bad-revision",
             kind="historical",
+            budget_profile="medium",
             repository_url="https://github.com/karpathy/micrograd",
             revision="main",
             license="MIT",
@@ -63,6 +96,7 @@ def test_constructed_case_requires_a_fault_patch():
         BenchmarkCase(
             id="constructed-01",
             kind="constructed",
+            budget_profile="small",
             repository_url="https://github.com/karpathy/micrograd",
             revision="a" * 40,
             license="MIT",

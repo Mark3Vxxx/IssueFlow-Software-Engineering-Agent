@@ -8,10 +8,11 @@ import yaml
 from issueflow.benchmark import load_catalog
 
 
-def make_case(case_id: str, kind: str) -> dict[str, str]:
+def make_case(case_id: str, kind: str, budget_profile: str) -> dict[str, str]:
     case = {
         "id": case_id,
         "kind": kind,
+        "budget_profile": budget_profile,
         "repository_url": "https://github.com/karpathy/micrograd",
         "revision": "a" * 40,
         "license": "MIT",
@@ -33,11 +34,11 @@ def test_catalog_accepts_one_historical_and_four_constructed_cases(tmp_path):
         yaml.safe_dump(
             {
                 "cases": [
-                    make_case("historical-01", "historical"),
-                    make_case("constructed-01", "constructed"),
-                    make_case("constructed-02", "constructed"),
-                    make_case("constructed-03", "constructed"),
-                    make_case("constructed-04", "constructed"),
+                    make_case("historical-01", "historical", "medium"),
+                    make_case("constructed-01", "constructed", "small"),
+                    make_case("constructed-02", "constructed", "small"),
+                    make_case("constructed-03", "constructed", "small"),
+                    make_case("constructed-04", "constructed", "small"),
                 ]
             }
         ),
@@ -53,6 +54,13 @@ def test_catalog_accepts_one_historical_and_four_constructed_cases(tmp_path):
         "constructed-03",
         "constructed-04",
     ]
+    assert {case_id: case.budget_profile for case_id, case in catalog.items()} == {
+        "historical-01": "medium",
+        "constructed-01": "small",
+        "constructed-02": "small",
+        "constructed-03": "small",
+        "constructed-04": "small",
+    }
 
 
 def test_catalog_rejects_any_other_sample_mix(tmp_path):
