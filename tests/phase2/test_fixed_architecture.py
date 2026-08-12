@@ -632,6 +632,155 @@ def test_coder_subprocess_timeout_preserves_model_tool_and_patch_usage(
     assert [step.role for step in result.steps] == ["planner", "retriever", "coder"]
 
 
+class MixedRetrieverModel:
+    def __init__(self):
+        self.calls = 0
+
+    def complete(self, system_prompt, payload, schema):
+        self.calls += 1
+        assert schema is EvidenceBundle
+        return StructuredCompletion(
+            value=EvidenceBundle(
+                tool_calls=[{"tool": "search", "arguments": {"query": "broken"}}]
+            ),
+            usage=Usage(model_calls=1),
+        )
+
+
+def test_fixed_rejects_mixed_retriever_bound_to_wrong_workspace(
+    case, tmp_path, budget
+):
+    role_workspace = tmp_path / "hidden-role-workspace"
+    role_workspace.mkdir()
+    (role_workspace / "engine.py").write_text("broken\n", encoding="utf-8")
+    requested_workspace = tmp_path / "requested-workspace"
+    requested_workspace.mkdir()
+    model = MixedRetrieverModel()
+    tools = RecordingTools(role_workspace, case, Sandbox())
+    production = RoleSet.production(model, tools)
+    injected, scripts = scripted_roles(["approved"])
+    mixed = RoleSet(
+        plan=injected.plan,
+        retrieve=production.retrieve,
+        code=injected.code,
+        review=injected.review,
+    )
+
+    result = FixedMultiAgentArchitecture(roles=mixed).run(
+        case,
+        requested_workspace,
+        budget,
+        RunContext(run_id="fixed-mixed-retriever-workspace"),
+    )
+
+    assert result.status is RunStatus.FAILED
+    assert result.stop_reason == "invalid_role_set"
+    assert model.calls == 0
+    assert tools.calls == []
+    assert all(script.calls == 0 for script in scripts.values())
+    assert result.steps == []
+    assert result.route_count == 0
+
+
+class RecordingSandbox:
+    def __init__(self):
+        self.commands = []
+
+    def run(self, workspace, command, timeout_seconds):
+        self.commands.append(command)
+        return SandboxResult()
+
+
+class MixedCoderModel:
+    def __init__(self, command):
+        self.command = command
+        self.calls = 0
+
+    def complete(self, system_prompt, payload, schema):
+        self.calls += 1
+        assert schema is CoderOutput
+        return StructuredCompletion(
+            value=CoderOutput(
+                current_diff="hidden case command",
+                tool_calls=[
+                    {"tool": "run_tests", "arguments": {"command": self.command}}
+                ],
+            ),
+            usage=Usage(model_calls=1),
+        )
+
+
+def test_fixed_rejects_mixed_coder_bound_to_a_different_case(case, tmp_path, budget):
+    other_case = case.model_copy(
+        update={
+            "id": "constructed-hidden",
+            "reproduce_command": "other-reproduce",
+            "verify_command": "other-verify",
+        }
+    )
+    sandbox = RecordingSandbox()
+    model = MixedCoderModel(other_case.verify_command)
+    production = RoleSet.production(model, ToolExecutor(tmp_path, other_case, sandbox))
+    injected, scripts = scripted_roles(["approved"])
+    mixed = RoleSet(
+        plan=injected.plan,
+        retrieve=injected.retrieve,
+        code=production.code,
+        review=injected.review,
+    )
+
+    result = FixedMultiAgentArchitecture(roles=mixed).run(
+        case,
+        tmp_path,
+        budget,
+        RunContext(run_id="fixed-mixed-coder-case"),
+    )
+
+    assert result.status is RunStatus.FAILED
+    assert result.stop_reason == "invalid_role_set"
+    assert model.calls == 0
+    assert sandbox.commands == []
+    assert all(script.calls == 0 for script in scripts.values())
+    assert result.steps == []
+    assert result.route_count == 0
+
+
+class NeverCalledModel:
+    def __init__(self):
+        self.calls = 0
+
+    def complete(self, system_prompt, payload, schema):
+        self.calls += 1
+        raise AssertionError("mixed production owners must be rejected before execution")
+
+
+def test_fixed_rejects_production_callbacks_from_different_owners(case, tmp_path, budget):
+    models = [NeverCalledModel() for _ in range(4)]
+    production_sets = [
+        RoleSet.production(model, ToolExecutor(tmp_path, case, Sandbox()))
+        for model in models
+    ]
+    mixed = RoleSet(
+        plan=production_sets[0].plan,
+        retrieve=production_sets[1].retrieve,
+        code=production_sets[2].code,
+        review=production_sets[3].review,
+    )
+
+    result = FixedMultiAgentArchitecture(roles=mixed).run(
+        case,
+        tmp_path,
+        budget,
+        RunContext(run_id="fixed-multiple-production-owners"),
+    )
+
+    assert result.status is RunStatus.FAILED
+    assert result.stop_reason == "invalid_role_set"
+    assert all(model.calls == 0 for model in models)
+    assert result.steps == []
+    assert result.route_count == 0
+
+
 @pytest.mark.parametrize(
     ("planner_usage", "budget_overrides", "expected_reason"),
     [

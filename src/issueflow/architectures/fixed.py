@@ -100,6 +100,9 @@ class FixedMultiAgentArchitecture:
                 final_message="" if feedback is None else feedback.feedback,
             )
 
+        if not self.roles.has_valid_composition:
+            return finish(RunStatus.FAILED, "invalid_role_set")
+
         executors = [
             executor
             for executor in (self.roles.executor, self.tools)

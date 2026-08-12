@@ -117,15 +117,31 @@ class RoleSet:
         owner = self._production_owner()
         return None if owner is None else owner.tools
 
-    def _production_owner(self) -> _ProductionRoles | None:
-        owners = [
-            getattr(callback, "__self__", None)
-            for callback in (self.plan, self.retrieve, self.code, self.review)
+    @property
+    def has_valid_composition(self) -> bool:
+        """Accept fully injected roles or four production methods from one owner only."""
+        owners = self._callback_owners()
+        production_owners = [
+            owner for owner in owners if isinstance(owner, _ProductionRoles)
         ]
+        if not production_owners:
+            return True
+        return len(production_owners) == 4 and all(
+            owner is production_owners[0] for owner in production_owners[1:]
+        )
+
+    def _production_owner(self) -> _ProductionRoles | None:
+        owners = self._callback_owners()
         owner = owners[0]
         if any(candidate is not owner for candidate in owners[1:]):
             return None
         return owner if isinstance(owner, _ProductionRoles) else None
+
+    def _callback_owners(self) -> list[object | None]:
+        return [
+            getattr(callback, "__self__", None)
+            for callback in (self.plan, self.retrieve, self.code, self.review)
+        ]
 
 
 @dataclass
