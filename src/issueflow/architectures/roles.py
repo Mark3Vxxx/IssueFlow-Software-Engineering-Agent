@@ -33,6 +33,7 @@ class _RoleFailure:
     update: RoleUpdate
     step: TraceStep
 
+
 PLANNER_PROMPT = """You are the Planner in a bounded software-repair workflow.
 Return at most six concrete steps with target files, validation conditions, and risks.
 You have no tools. Do not request file reads, patches, tests, shell commands, or network access.
@@ -121,9 +122,7 @@ class RoleSet:
     def has_valid_composition(self) -> bool:
         """Accept fully injected roles or four production methods from one owner only."""
         owners = self._callback_owners()
-        production_owners = [
-            owner for owner in owners if isinstance(owner, _ProductionRoles)
-        ]
+        production_owners = [owner for owner in owners if isinstance(owner, _ProductionRoles)]
         if not production_owners:
             return True
         return len(production_owners) == 4 and all(
@@ -162,9 +161,7 @@ class _ProductionRoles:
         if stop_reason is not None:
             return (
                 {"plan": output, "usage": usage, "stop_reason": stop_reason},
-                self._step(
-                    RoleName.PLANNER, stop_reason, usage, started_at, failed=True
-                ),
+                self._step(RoleName.PLANNER, stop_reason, usage, started_at, failed=True),
             )
         return (
             {"plan": output, "usage": usage},
@@ -173,9 +170,7 @@ class _ProductionRoles:
 
     def retrieve(self, state: WorkflowState) -> tuple[RoleUpdate, TraceStep]:
         started_at = self.clock()
-        completion = self._complete(
-            RoleName.RETRIEVER, RETRIEVER_PROMPT, state, EvidenceBundle
-        )
+        completion = self._complete(RoleName.RETRIEVER, RETRIEVER_PROMPT, state, EvidenceBundle)
         if isinstance(completion, _RoleFailure):
             return completion.update, completion.step
         output, usage = completion
@@ -184,7 +179,7 @@ class _ProductionRoles:
         for call in output.tool_calls:
             if stop_reason is not None:
                 break
-            stop_reason = self._budget_reason(state, usage)
+            stop_reason = self._tool_budget_reason(state, usage, call.tool)
             if stop_reason is not None:
                 break
             usage = _add_usage(usage, _tool_usage(call.tool))
@@ -196,7 +191,14 @@ class _ProductionRoles:
             except (TimeoutError, TimeoutExpired):
                 stop_reason = "time_budget_exhausted"
                 break
-            except (FileNotFoundError, NotImplementedError, OSError, RuntimeError, TypeError, ValueError):
+            except (
+                FileNotFoundError,
+                NotImplementedError,
+                OSError,
+                RuntimeError,
+                TypeError,
+                ValueError,
+            ):
                 stop_reason = "retrieval_failure"
                 break
             if len(evidence) < 20:
@@ -233,7 +235,7 @@ class _ProductionRoles:
         for call in output.tool_calls:
             if stop_reason is not None:
                 break
-            stop_reason = self._budget_reason(state, usage)
+            stop_reason = self._tool_budget_reason(state, usage, call.tool)
             if stop_reason is not None:
                 break
             usage = _add_usage(usage, _tool_usage(call.tool))
@@ -245,7 +247,14 @@ class _ProductionRoles:
             except (TimeoutError, TimeoutExpired):
                 stop_reason = "time_budget_exhausted"
                 break
-            except (FileNotFoundError, NotImplementedError, OSError, RuntimeError, TypeError, ValueError):
+            except (
+                FileNotFoundError,
+                NotImplementedError,
+                OSError,
+                RuntimeError,
+                TypeError,
+                ValueError,
+            ):
                 stop_reason = (
                     "patch_application_failure"
                     if call.tool == "apply_patch"
@@ -286,9 +295,7 @@ class _ProductionRoles:
                     "usage": usage,
                     "stop_reason": stop_reason,
                 },
-                self._step(
-                    RoleName.REVIEWER, stop_reason, usage, started_at, failed=True
-                ),
+                self._step(RoleName.REVIEWER, stop_reason, usage, started_at, failed=True),
             )
         return (
             {"review_feedback": output, "usage": usage},
@@ -327,6 +334,22 @@ class _ProductionRoles:
             self.budget,
             self.elapsed_seconds(),
         )
+
+    def _tool_budget_reason(
+        self,
+        state: WorkflowState,
+        role_usage: Usage,
+        tool: str,
+    ) -> str | None:
+        reason = self._budget_reason(state, role_usage)
+        if reason is not None or self.budget is None:
+            return reason
+        usage = _add_usage(state["usage"], role_usage)
+        if usage.tool_calls >= self.budget.max_tool_calls:
+            return "tool_budget_exhausted"
+        if tool == "apply_patch" and usage.patch_attempts >= self.budget.max_patch_attempts:
+            return "patch_budget_exhausted"
+        return None
 
     def _tool_timeout_seconds(self) -> int:
         if self.budget is None or self.elapsed_seconds is None:
@@ -386,8 +409,5 @@ def _tool_usage(tool: str) -> Usage:
 
 def _add_usage(left: Usage, right: Usage) -> Usage:
     return Usage(
-        **{
-            field: getattr(left, field) + getattr(right, field)
-            for field in Usage.model_fields
-        }
+        **{field: getattr(left, field) + getattr(right, field) for field in Usage.model_fields}
     )

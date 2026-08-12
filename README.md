@@ -1,8 +1,8 @@
 # IssueFlow
 
-[中文说明](README.zh-CN.md) · [Phase-one evaluation](docs/phase-1-evaluation.md) · [Three-minute demo](docs/demo-script.md)
+[中文说明](README.zh-CN.md) · [Phase 2 progress](docs/phase-2-progress.md) · [Architecture notes](docs/phase-2a-architecture-notes.md) · [Phase-one evaluation](docs/phase-1-evaluation.md)
 
-IssueFlow is a reproducible single-agent software-repair MVP for Apple Silicon Macs. It runs one real DeepSeek agent against five pinned `karpathy/micrograd` benchmark cases, executes registered checks inside a network-disabled Docker sandbox, and persists the evidence to SQLite and downloadable JSON.
+IssueFlow is a reproducible software-repair architecture workbench for Apple Silicon Macs. Phase 2A runs Direct, phase-one Single, Fixed multi-agent, and Dynamic Supervisor implementations through the same five pinned `karpathy/micrograd` compatibility cases, network-disabled Docker checks, deterministic success gates, SQLite store, and downloadable JSON.
 
 ## What you will learn
 
@@ -12,7 +12,7 @@ One repair run follows the same observable path every time:
 flowchart LR
     A["Benchmark case"] --> B["Faulty Git workspace"]
     B --> C["Docker reproduction"]
-    C --> D["Single Agent"]
+    C --> D["Direct / Single / Fixed / Dynamic"]
     D --> E["Independent verification"]
     E --> F["Deterministic gates + Reviewer"]
     F --> G["SQLite / JSON / UI"]
@@ -21,8 +21,9 @@ flowchart LR
 - **Benchmark** defines the repository, exact revision, issue, reproduction, verification, provenance, and reference patch.
 - **Workspace preparation** creates a separate Git clone and establishes the faulty code as its clean baseline.
 - **Docker sandbox** runs only registered checks with no network and fixed resource limits.
-- **Single Agent** may only search, read a file, apply a patch, and run a registered test.
-- **RunService** connects reproduction, Agent execution, independent verification, diff collection, review, and persistence.
+- **Architecture contract** gives all four arms the same case, workspace, budget, result, trace, and usage boundary.
+- **Agents and roles** have fixed tool permissions: Planner and Reviewer have none, Retriever can search/read, and Single/Coder can apply patches and run registered tests.
+- **RunService** connects reproduction, selected architecture execution, independent verification, diff collection, review, and persistence without architecture-specific success rules.
 - **Reviewer** applies deterministic functional gates first; model review is advisory and cannot override failed tests.
 - **TraceStore and UI** preserve and display the ordered, redacted evidence.
 
@@ -64,7 +65,7 @@ make verify-benchmarks
 make demo
 ```
 
-Open [http://localhost:8501](http://localhost:8501), select `constructed-01`, and choose **开始真实修复**. The page refreshes while the run is active and then shows its result, diff, test evidence, Reviewer conclusion, metrics, timeline, and JSON download.
+Open [http://localhost:8501](http://localhost:8501), select `constructed-01`, choose an architecture, and choose **开始真实修复**. Single remains the default. The page refreshes while the run is active and then shows its architecture, role/route trace, result, diff, test evidence, Reviewer conclusion, metrics, and JSON download.
 
 Runtime data is stored under `.issueflow/` by default. Set `ISSUEFLOW_DATA_DIR` to use a different directory. Optional model settings are `ISSUEFLOW_MODEL` and `ISSUEFLOW_BASE_URL`.
 
@@ -77,6 +78,7 @@ make test                 # full suite, including the Docker end-to-end test
 make test-e2e             # Docker/Git/Agent/SQLite/JSON pipeline only
 make verify-benchmarks    # all five cases fail before and pass after reference fixes
 make verify-phase-1       # complete release check in the required order
+make test-phase-2         # Phase 2A contract, architecture, UI, and four-arm E2E checks
 ```
 
 Docker must be running for `make test`, `make test-e2e`, and `make verify-phase-1`. Benchmark verification also needs internet access to clone the pinned public repository.
@@ -121,4 +123,4 @@ Higher budgets increase available work but never guarantee a successful repair.
 
 The checked-in [live Agent trace](artifacts/phase-1/constructed-01-live-run.json) is a credential-safe JSON export from a real DeepSeek run first stored in SQLite. The [evaluation report](docs/phase-1-evaluation.md) separates reference-patch replay from live-Agent results and explains the metrics.
 
-This is an educational MVP, not a production repair service. It covers one small Python repository, public checks, one Agent, one host, and a local SQLite database. Model output can vary, API availability affects live runs, and the displayed duration is the sum of persisted execution-step durations rather than full wall-clock latency.
+This is an educational MVP, not a production repair service. Phase 2A proves four-architecture integration on one small Python repository and public checks; it does not yet contain the new strict benchmark or comparative experiment results. LangGraph checkpoints are in memory, runs use one host and local SQLite, model output can vary, and API availability affects live runs. See the [Phase 2A architecture notes](docs/phase-2a-architecture-notes.md) for design details and limitations.

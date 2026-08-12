@@ -96,9 +96,7 @@ class DeepSeekReviewClient:
             )
             response.raise_for_status()
         except httpx.HTTPError:
-            raise ModelProtocolError(
-                "reviewer_request_failed", Usage(model_calls=1)
-            ) from None
+            raise ModelProtocolError("reviewer_request_failed", Usage(model_calls=1)) from None
 
         try:
             payload = response.json()

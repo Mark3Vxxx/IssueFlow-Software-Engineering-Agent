@@ -56,9 +56,7 @@ class EvidenceBundle(_StrictOutput):
     """Retriever evidence plus allowlisted requests used to obtain it."""
 
     items: list[EvidenceItem] = Field(default_factory=list, max_length=MAX_EVIDENCE_ITEMS)
-    tool_calls: list[RetrievalToolCall] = Field(
-        default_factory=list, max_length=MAX_EVIDENCE_ITEMS
-    )
+    tool_calls: list[RetrievalToolCall] = Field(default_factory=list, max_length=MAX_EVIDENCE_ITEMS)
 
 
 class CoderOutput(_StrictOutput):
@@ -115,9 +113,9 @@ def budget_stop_reason(
     """Return the shared hard-budget reason used before roles and individual tools."""
     if elapsed_seconds >= budget.max_seconds:
         return "time_budget_exhausted"
-    if usage.tool_calls >= budget.max_tool_calls:
+    if usage.tool_calls > budget.max_tool_calls:
         return "tool_budget_exhausted"
-    if usage.patch_attempts >= budget.max_patch_attempts:
+    if usage.patch_attempts > budget.max_patch_attempts:
         return "patch_budget_exhausted"
     if usage.input_tokens > budget.max_input_tokens:
         return "input_token_budget_exhausted"

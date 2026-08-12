@@ -312,9 +312,7 @@ class ProductionRoleModel:
 def test_production_roles_use_only_their_allowlisted_tool_executor_boundary(case, tmp_path):
     target = tmp_path / "engine.py"
     target.write_text("return 'broken'\n", encoding="utf-8")
-    roles = RoleSet.production(
-        ProductionRoleModel(), ToolExecutor(tmp_path, case, Sandbox())
-    )
+    roles = RoleSet.production(ProductionRoleModel(), ToolExecutor(tmp_path, case, Sandbox()))
     state = {
         "case_id": case.id,
         "issue": case.issue,
@@ -361,17 +359,13 @@ class ClaimedPublicTestModel:
 
 
 def test_production_coder_ignores_unexecuted_model_test_claim(case, tmp_path):
-    roles = RoleSet.production(
-        ClaimedPublicTestModel(), ToolExecutor(tmp_path, case, Sandbox())
-    )
+    roles = RoleSet.production(ClaimedPublicTestModel(), ToolExecutor(tmp_path, case, Sandbox()))
     state = validate_workflow_state(
         {
             "case_id": case.id,
             "issue": case.issue,
             "plan": PlanOutput(steps=["Repair engine.py"]),
-            "evidence": [
-                EvidenceItem(path="engine.py", line=1, summary="Wrong return value.")
-            ],
+            "evidence": [EvidenceItem(path="engine.py", line=1, summary="Wrong return value.")],
             "current_diff": "",
             "public_test_result": "",
             "review_feedback": None,
@@ -540,16 +534,12 @@ def test_fixed_checks_workspace_of_prebuilt_production_roles(case, tmp_path, bud
     assert result.stop_reason == "workspace_mismatch"
 
 
-def test_fixed_checks_role_workspace_when_separate_tools_are_also_supplied(
-    case, tmp_path, budget
-):
+def test_fixed_checks_role_workspace_when_separate_tools_are_also_supplied(case, tmp_path, budget):
     role_workspace = tmp_path / "roles"
     role_workspace.mkdir()
     requested_workspace = tmp_path / "requested"
     requested_workspace.mkdir()
-    roles = RoleSet.production(
-        ProductionRoleModel(), ToolExecutor(role_workspace, case, Sandbox())
-    )
+    roles = RoleSet.production(ProductionRoleModel(), ToolExecutor(role_workspace, case, Sandbox()))
     requested_tools = ToolExecutor(requested_workspace, case, Sandbox())
 
     result = FixedMultiAgentArchitecture(roles=roles, tools=requested_tools).run(
@@ -571,9 +561,7 @@ def test_fixed_rejects_executor_bound_to_a_different_case(case, tmp_path, budget
             "verify_command": "python -c 'raise SystemExit(2)'",
         }
     )
-    roles = RoleSet.production(
-        ProductionRoleModel(), ToolExecutor(tmp_path, other_case, Sandbox())
-    )
+    roles = RoleSet.production(ProductionRoleModel(), ToolExecutor(tmp_path, other_case, Sandbox()))
 
     result = FixedMultiAgentArchitecture(roles=roles).run(
         case,
@@ -609,9 +597,7 @@ class RetrieverTimeoutModel:
         return StructuredCompletion(value=value, usage=Usage(model_calls=1))
 
 
-def test_retriever_subprocess_timeout_preserves_model_and_tool_usage(
-    case, tmp_path, budget
-):
+def test_retriever_subprocess_timeout_preserves_model_and_tool_usage(case, tmp_path, budget):
     tools = SubprocessTimeoutTools(tmp_path, case)
 
     result = FixedMultiAgentArchitecture(model=RetrieverTimeoutModel(), tools=tools).run(
@@ -652,9 +638,7 @@ class CoderTimeoutModel:
         return StructuredCompletion(value=value, usage=Usage(model_calls=1))
 
 
-def test_coder_subprocess_timeout_preserves_model_tool_and_patch_usage(
-    case, tmp_path, budget
-):
+def test_coder_subprocess_timeout_preserves_model_tool_and_patch_usage(case, tmp_path, budget):
     tools = SubprocessTimeoutTools(tmp_path, case)
 
     result = FixedMultiAgentArchitecture(model=CoderTimeoutModel(), tools=tools).run(
@@ -683,16 +667,12 @@ class MixedRetrieverModel:
         self.calls += 1
         assert schema is EvidenceBundle
         return StructuredCompletion(
-            value=EvidenceBundle(
-                tool_calls=[{"tool": "search", "arguments": {"query": "broken"}}]
-            ),
+            value=EvidenceBundle(tool_calls=[{"tool": "search", "arguments": {"query": "broken"}}]),
             usage=Usage(model_calls=1),
         )
 
 
-def test_fixed_rejects_mixed_retriever_bound_to_wrong_workspace(
-    case, tmp_path, budget
-):
+def test_fixed_rejects_mixed_retriever_bound_to_wrong_workspace(case, tmp_path, budget):
     role_workspace = tmp_path / "hidden-role-workspace"
     role_workspace.mkdir()
     (role_workspace / "engine.py").write_text("broken\n", encoding="utf-8")
@@ -745,9 +725,7 @@ class MixedCoderModel:
         return StructuredCompletion(
             value=CoderOutput(
                 current_diff="hidden case command",
-                tool_calls=[
-                    {"tool": "run_tests", "arguments": {"command": self.command}}
-                ],
+                tool_calls=[{"tool": "run_tests", "arguments": {"command": self.command}}],
             ),
             usage=Usage(model_calls=1),
         )
@@ -800,8 +778,7 @@ class NeverCalledModel:
 def test_fixed_rejects_production_callbacks_from_different_owners(case, tmp_path, budget):
     models = [NeverCalledModel() for _ in range(4)]
     production_sets = [
-        RoleSet.production(model, ToolExecutor(tmp_path, case, Sandbox()))
-        for model in models
+        RoleSet.production(model, ToolExecutor(tmp_path, case, Sandbox())) for model in models
     ]
     mixed = RoleSet(
         plan=production_sets[0].plan,
@@ -860,9 +837,9 @@ def test_fixed_stops_for_time_exhaustion_before_the_next_role(case, tmp_path, bu
     roles, scripts = scripted_roles(["approved"])
     readings = iter([0.0, 0.0, 61.0, 61.0])
 
-    result = FixedMultiAgentArchitecture(
-        roles=roles, clock=lambda: next(readings)
-    ).run(case, tmp_path, budget, RunContext(run_id="fixed-time"))
+    result = FixedMultiAgentArchitecture(roles=roles, clock=lambda: next(readings)).run(
+        case, tmp_path, budget, RunContext(run_id="fixed-time")
+    )
 
     assert result.status is RunStatus.TIMED_OUT
     assert result.stop_reason == "time_budget_exhausted"
@@ -874,14 +851,12 @@ def test_fixed_records_each_roles_wall_time_in_shared_usage(case, tmp_path, budg
     roles, _ = scripted_roles(["approved"])
     readings = iter([0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0])
 
-    result = FixedMultiAgentArchitecture(
-        roles=roles, clock=lambda: next(readings)
-    ).run(case, tmp_path, budget, RunContext(run_id="fixed-role-time"))
+    result = FixedMultiAgentArchitecture(roles=roles, clock=lambda: next(readings)).run(
+        case, tmp_path, budget, RunContext(run_id="fixed-role-time")
+    )
 
     assert result.usage.duration_ms == 4_000
-    assert {
-        role: usage.duration_ms for role, usage in result.role_usage.items()
-    } == {
+    assert {role: usage.duration_ms for role, usage in result.role_usage.items()} == {
         RoleName.PLANNER: 1_000,
         RoleName.RETRIEVER: 1_000,
         RoleName.CODER: 1_000,

@@ -285,9 +285,7 @@ def render_app(
         index=1,
     )
     selected_architecture = next(
-        kind
-        for kind, label in ARCHITECTURE_LABELS.items()
-        if label == selected_architecture_label
+        kind for kind, label in ARCHITECTURE_LABELS.items() if label == selected_architecture_label
     )
     selected = case_views[selected_label]
     selected_case = catalog[selected.id]

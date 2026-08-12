@@ -7,6 +7,7 @@ from pathlib import Path
 from subprocess import run
 
 from issueflow.agent import ModelAction, SingleAgent, ToolExecutor
+from issueflow.architectures.single import SingleArchitecture
 from issueflow.models import BenchmarkCase, Budget, RunStatus
 from issueflow.reviewer import Reviewer
 from issueflow.run_service import GitWorkspacePreparer, RunService
@@ -127,9 +128,11 @@ def test_full_pipeline_replays_in_docker_and_exports_evidence(tmp_path):
         store=store,
         workspace_preparer=GitWorkspacePreparer(tmp_path / "workspaces", catalog_root),
         sandbox=sandbox,
-        agent_factory=lambda selected_case, workspace: SingleAgent(
-            model=ScriptedRepairModel(selected_case.verify_command),
-            tools=ToolExecutor(workspace, selected_case, sandbox),
+        architecture_factory=lambda _kind, selected_case, workspace: SingleArchitecture(
+            SingleAgent(
+                model=ScriptedRepairModel(selected_case.verify_command),
+                tools=ToolExecutor(workspace, selected_case, sandbox),
+            )
         ),
         reviewer=Reviewer(),
     )

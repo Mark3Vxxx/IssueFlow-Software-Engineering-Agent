@@ -99,6 +99,7 @@ TOOL_DEFINITIONS = [
     },
 ]
 
+
 class ModelAction(BaseModel):
     """One structured action proposed by the model."""
 

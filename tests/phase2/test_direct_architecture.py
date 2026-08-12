@@ -198,9 +198,7 @@ def test_direct_enforces_model_budgets_before_applying_patch(
     assert target.read_text(encoding="utf-8") == "return 'broken'\n"
 
 
-def test_direct_normalizes_model_protocol_failure_without_leaking_error(
-    case, tmp_path, budget
-):
+def test_direct_normalizes_model_protocol_failure_without_leaking_error(case, tmp_path, budget):
     secret = "top-secret-provider-detail"
     model = StubStructuredModel(
         error=ModelProtocolError(secret, Usage(model_calls=1, input_tokens=7))
@@ -234,9 +232,7 @@ def test_direct_charges_protocol_failure_usage_against_budget(case, tmp_path, bu
     assert result.usage.input_tokens == 1_001
 
 
-def test_direct_normalizes_patch_timeout_as_time_budget_exhaustion(
-    case, tmp_path, budget
-):
+def test_direct_normalizes_patch_timeout_as_time_budget_exhaustion(case, tmp_path, budget):
     class TimedOutTools:
         workspace = tmp_path.resolve()
 

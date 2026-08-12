@@ -103,7 +103,9 @@ class DeepSeekStructuredModel:
                         {"role": "system", "content": system_prompt},
                         {
                             "role": "user",
-                            "content": json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+                            "content": json.dumps(
+                                payload, ensure_ascii=False, separators=(",", ":")
+                            ),
                         },
                     ],
                     "response_format": {"type": "json_object"},

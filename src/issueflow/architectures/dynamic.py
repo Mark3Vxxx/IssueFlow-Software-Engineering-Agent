@@ -100,12 +100,8 @@ class DynamicSupervisorArchitecture:
             final_state: WorkflowState | None = None,
         ) -> ArchitectureResult:
             usage = latest_usage if final_state is None else final_state["usage"]
-            role_usage = (
-                latest_role_usage if final_state is None else final_state["role_usage"]
-            )
-            route_count = (
-                latest_route_count if final_state is None else final_state["route_count"]
-            )
+            role_usage = latest_role_usage if final_state is None else final_state["role_usage"]
+            route_count = latest_route_count if final_state is None else final_state["route_count"]
             elapsed = elapsed_seconds()
             usage = usage.model_copy(update={"duration_ms": int(elapsed * 1_000)})
             feedback = None if final_state is None else final_state["review_feedback"]
@@ -124,9 +120,7 @@ class DynamicSupervisorArchitecture:
             return finish(RunStatus.FAILED, "invalid_role_set")
 
         executors = [
-            executor
-            for executor in (self.roles.executor, self.tools)
-            if executor is not None
+            executor for executor in (self.roles.executor, self.tools) if executor is not None
         ]
         for executor in executors:
             if workspace.resolve() != executor.workspace:
@@ -187,10 +181,7 @@ class DynamicSupervisorArchitecture:
             supervisor_finished_seconds = elapsed_seconds()
             duration_ms = max(
                 0,
-                int(
-                    (supervisor_finished_seconds - supervisor_started_seconds)
-                    * 1_000
-                ),
+                int((supervisor_finished_seconds - supervisor_started_seconds) * 1_000),
             )
             delta = delta.model_copy(update={"duration_ms": duration_ms})
             usage = _add_usage(state["usage"], delta)
@@ -201,9 +192,7 @@ class DynamicSupervisorArchitecture:
             route_count = state["route_count"] + (decision is not None)
 
             if failure_reason is None:
-                failure_reason = budget_stop_reason(
-                    usage, budget, supervisor_finished_seconds
-                )
+                failure_reason = budget_stop_reason(usage, budget, supervisor_finished_seconds)
             if failure_reason is None and decision is not None:
                 failure_reason = _invalid_route_reason(decision.next_role, state)
 
@@ -221,11 +210,7 @@ class DynamicSupervisorArchitecture:
             elif decision is not None:
                 next_route = decision.next_role
 
-            summary = (
-                failure_reason
-                if decision is None
-                else decision.reason
-            )
+            summary = failure_reason if decision is None else decision.reason
             status = (
                 "failed"
                 if failure_reason is not None
@@ -255,9 +240,7 @@ class DynamicSupervisorArchitecture:
             def execute(state: WorkflowState) -> dict[str, object]:
                 nonlocal latest_usage, latest_role_usage, latest_route_count
                 role_started_seconds = elapsed_seconds()
-                before_reason = budget_stop_reason(
-                    state["usage"], budget, role_started_seconds
-                )
+                before_reason = budget_stop_reason(state["usage"], budget, role_started_seconds)
                 if before_reason is not None:
                     return {"stop_reason": before_reason}
 
@@ -334,9 +317,7 @@ class DynamicSupervisorArchitecture:
                             update[key] = validated[key]
 
                 stop_reason = update.get("stop_reason")
-                budget_reason = budget_stop_reason(
-                    usage, budget, role_finished_seconds
-                )
+                budget_reason = budget_stop_reason(usage, budget, role_finished_seconds)
                 if budget_reason is not None:
                     stop_reason = budget_reason
                 if stop_reason is not None:
@@ -412,13 +393,10 @@ def _invalid_route_reason(next_role: str, state: WorkflowState) -> str | None:
         return "invalid_supervisor_route"
     if (
         next_role == "reviewer"
-        and state["role_history"].count(RoleName.REVIEWER)
-        >= MAX_REVIEWER_INVOCATIONS
+        and state["role_history"].count(RoleName.REVIEWER) >= MAX_REVIEWER_INVOCATIONS
     ):
         return "invalid_supervisor_route"
-    if next_role == "stop" and not _public_verification_passed(
-        state["public_test_result"]
-    ):
+    if next_role == "stop" and not _public_verification_passed(state["public_test_result"]):
         return "invalid_supervisor_route"
     return None
 
@@ -442,13 +420,10 @@ def _supervisor_payload(
         "input_tokens": max(0, budget.max_input_tokens - usage.input_tokens),
         "output_tokens": max(0, budget.max_output_tokens - usage.output_tokens),
         "cost_usd": max(0.0, budget.max_cost_usd - usage.cost_usd),
-        "supervisor_routes": max(
-            0, MAX_SUPERVISOR_ROUTES - state["route_count"]
-        ),
+        "supervisor_routes": max(0, MAX_SUPERVISOR_ROUTES - state["route_count"]),
         "reviewer_invocations": max(
             0,
-            MAX_REVIEWER_INVOCATIONS
-            - state["role_history"].count(RoleName.REVIEWER),
+            MAX_REVIEWER_INVOCATIONS - state["role_history"].count(RoleName.REVIEWER),
         ),
     }
     return payload

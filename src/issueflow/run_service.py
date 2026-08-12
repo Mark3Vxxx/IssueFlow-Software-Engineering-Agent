@@ -7,13 +7,11 @@ from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
 
-from issueflow.agent import AgentResult
 from issueflow.architectures.base import (
     ArchitectureKind,
     ArchitectureRunner,
     RunContext,
 )
-from issueflow.architectures.single import SingleArchitecture
 from issueflow.models import BenchmarkCase, Budget, RunRecord, RunStatus, TraceStep
 from issueflow.reviewer import Reviewer
 from issueflow.sandbox import SandboxResult
@@ -32,13 +30,6 @@ class SandboxRunner(Protocol):
     def run(self, workspace: Path, command: str, timeout_seconds: int) -> SandboxResult: ...
 
 
-class AgentRunner(Protocol):
-    """Run a configured single agent in one prepared workspace."""
-
-    def run(self, case: BenchmarkCase, workspace: Path, budget: Budget) -> AgentResult: ...
-
-
-AgentFactory = Callable[[BenchmarkCase, Path], AgentRunner]
 ArchitectureFactory = Callable[[ArchitectureKind, BenchmarkCase, Path], ArchitectureRunner]
 
 
@@ -104,29 +95,9 @@ class RunService:
         store: TraceStore,
         workspace_preparer: WorkspacePreparer,
         sandbox: SandboxRunner,
-        architecture_factory: ArchitectureFactory | None = None,
-        reviewer: Reviewer | None = None,
-        *,
-        agent_factory: AgentFactory | None = None,
+        architecture_factory: ArchitectureFactory,
+        reviewer: Reviewer,
     ) -> None:
-        if reviewer is None:
-            raise ValueError("reviewer is required")
-        if architecture_factory is not None and agent_factory is not None:
-            raise ValueError("provide architecture_factory or agent_factory, not both")
-        if architecture_factory is None:
-            if agent_factory is None:
-                raise ValueError("architecture_factory is required")
-
-            def adapt_single(
-                kind: ArchitectureKind,
-                case: BenchmarkCase,
-                workspace: Path,
-            ) -> ArchitectureRunner:
-                if kind is not ArchitectureKind.SINGLE:
-                    raise ValueError("legacy agent_factory supports only single")
-                return SingleArchitecture(agent_factory(case, workspace))
-
-            architecture_factory = adapt_single
         self.catalog = catalog
         self.store = store
         self.workspace_preparer = workspace_preparer
@@ -217,9 +188,7 @@ class RunService:
                 )
                 return self.store.get_run(run_id)
 
-            architecture_result = self.architecture_factory(
-                architecture, case, workspace
-            ).run(
+            architecture_result = self.architecture_factory(architecture, case, workspace).run(
                 case,
                 workspace,
                 budget,

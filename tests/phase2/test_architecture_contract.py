@@ -67,9 +67,7 @@ def budget() -> Budget:
 
 
 def test_architecture_kinds_are_the_four_experiment_arms():
-    assert [item.value for item in ArchitectureKind] == [
-        "direct", "single", "fixed", "dynamic"
-    ]
+    assert [item.value for item in ArchitectureKind] == ["direct", "single", "fixed", "dynamic"]
 
 
 def test_single_adapter_preserves_terminal_result(case, workspace, budget):

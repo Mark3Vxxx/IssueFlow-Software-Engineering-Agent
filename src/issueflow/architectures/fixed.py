@@ -30,9 +30,7 @@ from issueflow.structured_model import StructuredModel
 _ROLE_UPDATE_KEYS: dict[RoleName, frozenset[str]] = {
     RoleName.PLANNER: frozenset({"plan", "stop_reason"}),
     RoleName.RETRIEVER: frozenset({"evidence", "stop_reason"}),
-    RoleName.CODER: frozenset(
-        {"current_diff", "public_test_result", "stop_reason"}
-    ),
+    RoleName.CODER: frozenset({"current_diff", "public_test_result", "stop_reason"}),
     RoleName.REVIEWER: frozenset({"review_feedback", "stop_reason"}),
 }
 
@@ -80,12 +78,8 @@ class FixedMultiAgentArchitecture:
             final_state: WorkflowState | None = None,
         ) -> ArchitectureResult:
             usage = latest_usage if final_state is None else final_state["usage"]
-            role_usage = (
-                latest_role_usage if final_state is None else final_state["role_usage"]
-            )
-            route_count = (
-                latest_route_count if final_state is None else final_state["route_count"]
-            )
+            role_usage = latest_role_usage if final_state is None else final_state["role_usage"]
+            route_count = latest_route_count if final_state is None else final_state["route_count"]
             elapsed = elapsed_seconds()
             usage = usage.model_copy(update={"duration_ms": int(elapsed * 1_000)})
             feedback = None if final_state is None else final_state["review_feedback"]
@@ -104,9 +98,7 @@ class FixedMultiAgentArchitecture:
             return finish(RunStatus.FAILED, "invalid_role_set")
 
         executors = [
-            executor
-            for executor in (self.roles.executor, self.tools)
-            if executor is not None
+            executor for executor in (self.roles.executor, self.tools) if executor is not None
         ]
         for executor in executors:
             if workspace.resolve() != executor.workspace:
@@ -304,11 +296,7 @@ def _review_route(state: WorkflowState) -> str:
     if state["stop_reason"] is not None:
         return "end"
     feedback = state["review_feedback"]
-    if (
-        feedback is not None
-        and feedback.status == "needs_changes"
-        and state["rework_count"] == 0
-    ):
+    if feedback is not None and feedback.status == "needs_changes" and state["rework_count"] == 0:
         return "coder"
     return "end"
 
@@ -325,8 +313,5 @@ def _status_for_reason(reason: str) -> RunStatus:
 
 def _add_usage(left: Usage, right: Usage) -> Usage:
     return Usage(
-        **{
-            field: getattr(left, field) + getattr(right, field)
-            for field in Usage.model_fields
-        }
+        **{field: getattr(left, field) + getattr(right, field) for field in Usage.model_fields}
     )

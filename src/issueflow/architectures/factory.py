@@ -42,9 +42,7 @@ class ArchitectureFactory:
         if kind is ArchitectureKind.DIRECT:
             return DirectArchitecture(self.structured_model, tools)
         if kind is ArchitectureKind.SINGLE:
-            return SingleArchitecture(
-                SingleAgent(self.single_model_factory(case), tools)
-            )
+            return SingleArchitecture(SingleAgent(self.single_model_factory(case), tools))
         if kind is ArchitectureKind.FIXED:
             return FixedMultiAgentArchitecture(
                 model=self.structured_model,

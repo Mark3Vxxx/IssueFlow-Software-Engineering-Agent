@@ -104,11 +104,7 @@ def scripted_roles(
                 {
                     "evidence": evidence
                     if evidence is not None
-                    else [
-                        EvidenceItem(
-                            path="engine.py", line=1, summary="Wrong return value."
-                        )
-                    ],
+                    else [EvidenceItem(path="engine.py", line=1, summary="Wrong return value.")],
                     "usage": Usage(model_calls=1),
                 }
             ],
@@ -192,9 +188,7 @@ def test_supervisor_decision_rejects_extra_control_fields():
 
 def test_dynamic_records_each_supervisor_decision(case, tmp_path, budget):
     roles, _ = scripted_roles()
-    supervisor = ScriptedSupervisor(
-        ["planner", "retriever", "coder", "reviewer", "stop"]
-    )
+    supervisor = ScriptedSupervisor(["planner", "retriever", "coder", "reviewer", "stop"])
 
     result = run_dynamic(supervisor, roles, case, tmp_path, budget)
 
@@ -229,9 +223,7 @@ def test_dynamic_records_each_supervisor_decision(case, tmp_path, budget):
         ["retriever", "coder"],
     ],
 )
-def test_dynamic_rejects_coder_before_plan_and_evidence(
-    case, tmp_path, budget, routes
-):
+def test_dynamic_rejects_coder_before_plan_and_evidence(case, tmp_path, budget, routes):
     roles, scripts = scripted_roles(evidence=[])
 
     result = run_dynamic(
@@ -246,9 +238,7 @@ def test_dynamic_rejects_coder_before_plan_and_evidence(
 def test_dynamic_rejects_reviewer_before_non_empty_diff(case, tmp_path, budget):
     roles, scripts = scripted_roles()
 
-    result = run_dynamic(
-        ScriptedSupervisor(["reviewer"]), roles, case, tmp_path, budget
-    )
+    result = run_dynamic(ScriptedSupervisor(["reviewer"]), roles, case, tmp_path, budget)
 
     assert result.status is RunStatus.FAILED
     assert result.stop_reason == "invalid_supervisor_route"
@@ -269,9 +259,7 @@ def test_dynamic_rejects_a_third_reviewer_invocation(case, tmp_path, budget):
     assert result.route_count == 6
 
 
-def test_dynamic_rejects_stop_before_public_verification_succeeds(
-    case, tmp_path, budget
-):
+def test_dynamic_rejects_stop_before_public_verification_succeeds(case, tmp_path, budget):
     roles, scripts = scripted_roles()
 
     result = run_dynamic(ScriptedSupervisor(["stop"]), roles, case, tmp_path, budget)
@@ -293,11 +281,7 @@ class ClaimedVerificationModel:
             value = PlanOutput(steps=["Inspect engine.py"])
         elif schema is EvidenceBundle:
             value = EvidenceBundle(
-                items=[
-                    EvidenceItem(
-                        path="engine.py", line=1, summary="Wrong return value."
-                    )
-                ]
+                items=[EvidenceItem(path="engine.py", line=1, summary="Wrong return value.")]
             )
         elif schema is CoderOutput:
             value = CoderOutput(
@@ -309,9 +293,7 @@ class ClaimedVerificationModel:
         return StructuredCompletion(value=value, usage=Usage(model_calls=1))
 
 
-def test_dynamic_rejects_unexecuted_production_model_verification_claim(
-    case, tmp_path, budget
-):
+def test_dynamic_rejects_unexecuted_production_model_verification_claim(case, tmp_path, budget):
     model = ClaimedVerificationModel()
     tools = ToolExecutor(tmp_path, case, Sandbox())
 
@@ -341,13 +323,9 @@ def test_dynamic_stops_at_twelve_routes(case, tmp_path, budget):
     assert scripts[RoleName.PLANNER].calls == 12
 
 
-def test_dynamic_charges_supervisor_usage_to_the_shared_budget(
-    case, tmp_path, budget
-):
+def test_dynamic_charges_supervisor_usage_to_the_shared_budget(case, tmp_path, budget):
     roles, scripts = scripted_roles()
-    supervisor = ScriptedSupervisor(
-        ["planner"], usage=Usage(model_calls=1, input_tokens=1_001)
-    )
+    supervisor = ScriptedSupervisor(["planner"], usage=Usage(model_calls=1, input_tokens=1_001))
 
     result = run_dynamic(supervisor, roles, case, tmp_path, budget)
 
@@ -358,12 +336,8 @@ def test_dynamic_charges_supervisor_usage_to_the_shared_budget(
     assert scripts[RoleName.PLANNER].calls == 0
 
 
-def test_dynamic_stops_after_a_role_exhausts_the_shared_budget(
-    case, tmp_path, budget
-):
-    roles, scripts = scripted_roles(
-        planner_usage=Usage(model_calls=1, output_tokens=1_001)
-    )
+def test_dynamic_stops_after_a_role_exhausts_the_shared_budget(case, tmp_path, budget):
+    roles, scripts = scripted_roles(planner_usage=Usage(model_calls=1, output_tokens=1_001))
     supervisor = ScriptedSupervisor(["planner", "retriever"])
 
     result = run_dynamic(supervisor, roles, case, tmp_path, budget)
@@ -384,9 +358,7 @@ def test_dynamic_normalizes_malformed_role_output(case, tmp_path, budget):
         review=roles.review,
     )
 
-    result = run_dynamic(
-        ScriptedSupervisor(["planner"]), roles, case, tmp_path, budget
-    )
+    result = run_dynamic(ScriptedSupervisor(["planner"]), roles, case, tmp_path, budget)
 
     assert result.status is RunStatus.FAILED
     assert result.stop_reason == "invalid_role_output"
@@ -400,9 +372,7 @@ def test_dynamic_normalizes_supervisor_protocol_failure_without_leaking_details(
     secret = "top-secret-provider-detail"
     supervisor = ScriptedSupervisor(
         [],
-        error=ModelProtocolError(
-            secret, Usage(model_calls=1, input_tokens=7, output_tokens=3)
-        ),
+        error=ModelProtocolError(secret, Usage(model_calls=1, input_tokens=7, output_tokens=3)),
     )
 
     result = run_dynamic(supervisor, roles, case, tmp_path, budget)
@@ -432,14 +402,10 @@ class MalformedDecisionSupervisor:
         return Completion()
 
 
-def test_dynamic_preserves_usage_from_malformed_supervisor_decision(
-    case, tmp_path, budget
-):
+def test_dynamic_preserves_usage_from_malformed_supervisor_decision(case, tmp_path, budget):
     roles, scripts = scripted_roles()
 
-    result = run_dynamic(
-        MalformedDecisionSupervisor(), roles, case, tmp_path, budget
-    )
+    result = run_dynamic(MalformedDecisionSupervisor(), roles, case, tmp_path, budget)
 
     assert result.status is RunStatus.FAILED
     assert result.stop_reason == "invalid_supervisor_output"
@@ -480,18 +446,14 @@ class ProductionModel:
         return StructuredCompletion(value=value, usage=Usage(model_calls=1))
 
 
-def test_dynamic_checks_workspace_of_prebuilt_production_roles(
-    case, tmp_path, budget
-):
+def test_dynamic_checks_workspace_of_prebuilt_production_roles(case, tmp_path, budget):
     role_workspace = tmp_path / "roles"
     role_workspace.mkdir()
     requested_workspace = tmp_path / "requested"
     requested_workspace.mkdir()
     role_model = ProductionModel()
     supervisor = ScriptedSupervisor(["planner"])
-    roles = RoleSet.production(
-        role_model, ToolExecutor(role_workspace, case, Sandbox())
-    )
+    roles = RoleSet.production(role_model, ToolExecutor(role_workspace, case, Sandbox()))
 
     result = DynamicSupervisorArchitecture(model=supervisor, roles=roles).run(
         case,
@@ -506,13 +468,9 @@ def test_dynamic_checks_workspace_of_prebuilt_production_roles(
     assert role_model.calls == 0
 
 
-def test_dynamic_rejects_mixed_production_and_injected_roles(
-    case, tmp_path, budget
-):
+def test_dynamic_rejects_mixed_production_and_injected_roles(case, tmp_path, budget):
     production_model = ProductionModel()
-    production = RoleSet.production(
-        production_model, ToolExecutor(tmp_path, case, Sandbox())
-    )
+    production = RoleSet.production(production_model, ToolExecutor(tmp_path, case, Sandbox()))
     injected, scripts = scripted_roles()
     mixed = RoleSet(
         plan=injected.plan,

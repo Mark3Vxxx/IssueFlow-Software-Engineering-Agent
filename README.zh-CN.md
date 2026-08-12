@@ -1,8 +1,8 @@
 # IssueFlow
 
-[English](README.md) · [阶段一评估记录](docs/phase-1-evaluation.md) · [三分钟演示稿](docs/demo-script.md)
+[English](README.md) · [阶段二进度](docs/phase-2-progress.md) · [2A 架构笔记](docs/phase-2a-architecture-notes.md) · [阶段一评估记录](docs/phase-1-evaluation.md)
 
-IssueFlow 是一个面向 Apple Silicon Mac 的、可复现的单 Agent 软件修复 MVP。它让一个真实 DeepSeek Agent 处理 5 个固定版本的 `karpathy/micrograd` 案例，在默认断网的 Docker 沙箱中执行登记过的验证命令，并把全过程保存到 SQLite 和可下载的 JSON。
+IssueFlow 是一个面向 Apple Silicon Mac 的、可复现软件修复架构工作台。阶段 2A 让 Direct、阶段一 Single、Fixed 多 Agent 和 Dynamic Supervisor 使用相同的 5 个 `karpathy/micrograd` 兼容案例、断网 Docker 验证、确定性成功判定、SQLite 与可下载 JSON。
 
 ## 先理解项目全貌
 
@@ -12,7 +12,7 @@ IssueFlow 是一个面向 Apple Silicon Mac 的、可复现的单 Agent 软件�
 flowchart LR
     A["Benchmark 案例"] --> B["故障 Git 工作区"]
     B --> C["Docker 复现"]
-    C --> D["单 Agent 修复"]
+    C --> D["Direct / Single / Fixed / Dynamic"]
     D --> E["独立复验"]
     E --> F["确定性判定 + Reviewer"]
     F --> G["SQLite / JSON / 页面"]
@@ -21,8 +21,9 @@ flowchart LR
 - **Benchmark**：登记仓库、固定版本、Issue、复现命令、验证命令、来源和参考补丁。
 - **工作区准备**：为每次运行单独克隆仓库，把故障版本建立成干净的 Git 基线。
 - **Docker 沙箱**：默认断网，只执行登记过的测试，并限制 CPU、内存、进程数和时间。
-- **单 Agent**：只能使用 4 种工具——搜索、读取文件、应用补丁、运行登记测试。
-- **RunService**：把复现、Agent、独立验证、diff、Reviewer 和存储串成一次完整运行。
+- **统一架构契约**：四种架构接收相同案例、工作区和预算，并返回相同结构的结果、轨迹与用量。
+- **Agent 与角色边界**：Planner 和 Reviewer 没有工具；Retriever 只能搜索/读取；Single 与 Coder 才能应用补丁和运行登记测试。
+- **RunService**：把复现、所选架构、独立验证、diff、Reviewer 和存储串成完整运行；不会按架构改变成功标准。
 - **Reviewer**：先执行不可绕过的功能判定，再提供模型审查意见；模型意见不能推翻失败的测试。
 - **TraceStore 与页面**：按顺序保存并展示脱敏后的证据。
 
@@ -66,7 +67,7 @@ make verify-benchmarks
 make demo
 ```
 
-浏览器打开 [http://localhost:8501](http://localhost:8501)，推荐先选 `constructed-01`，点击“开始真实修复”。运行时页面会自动检查进度；结束后可以查看成功判定、代码 diff、测试证据、Reviewer、耗时、工具调用、Token、成本和完整时间线，也可以下载 JSON。
+浏览器打开 [http://localhost:8501](http://localhost:8501)，推荐先选 `constructed-01`，选择架构后点击“开始真实修复”；默认仍是 Single。结束后可以查看架构、角色/路由轨迹、成功判定、代码 diff、测试证据、Reviewer、用量和 JSON。
 
 运行数据默认保存在 `.issueflow/`。如需换目录，可设置 `ISSUEFLOW_DATA_DIR`；模型和接口地址可分别通过 `ISSUEFLOW_MODEL`、`ISSUEFLOW_BASE_URL` 调整。
 
@@ -79,6 +80,7 @@ make test                 # 全量测试，包含 Docker 端到端测试
 make test-e2e             # 只验证 Docker/Git/Agent/SQLite/JSON 完整链路
 make verify-benchmarks    # 验证 5 个案例：修复前失败、参考修复后通过
 make verify-phase-1       # 按正确顺序执行阶段一完整验收
+make test-phase-2         # 验证 2A 契约、四种架构、页面与四架构端到端链路
 ```
 
 执行 `make test`、`make test-e2e` 和 `make verify-phase-1` 时 Docker 必须处于运行状态。`make verify-benchmarks` 还需要联网克隆固定版本的公开仓库。
@@ -123,4 +125,4 @@ make verify-phase-1       # 按正确顺序执行阶段一完整验收
 
 仓库内的[真实 Agent 轨迹](artifacts/phase-1/constructed-01-live-run.json)来自一次真实 DeepSeek 成功运行：先写入 SQLite，再脱敏导出为 JSON。[阶段一评估记录](docs/phase-1-evaluation.md)会严格区分“参考补丁回放”和“真实 Agent 结果”。
 
-目前它仍是教学型 MVP：只覆盖一个小型 Python 项目、公开验证、单 Agent、单机和本地 SQLite。真实模型输出会有波动，API 可用性会影响运行；页面中的“总耗时”是已持久化执行步骤的耗时之和，不等同于包含模型网络等待的完整墙钟时间。
+目前它仍是教学型 MVP：阶段 2A 只证明四种架构能在一个小型 Python 仓库与公开验证上走通，还不包含新的严格 Benchmark 或架构对比实验结果。LangGraph checkpoint 仅在内存中，运行仍限于单机和本地 SQLite；真实模型输出与 API 可用性也会影响结果。设计细节与限制见 [2A 架构笔记](docs/phase-2a-architecture-notes.md)。

@@ -1,4 +1,5 @@
 from collections import deque
+from inspect import signature
 from pathlib import Path
 from subprocess import run
 
@@ -11,6 +12,7 @@ from issueflow.architectures.base import (
     ArchitectureResult,
     RunContext,
 )
+from issueflow.architectures.single import SingleArchitecture
 from issueflow.models import BenchmarkCase, Budget, RunStatus, TraceStep, Usage
 from issueflow.reviewer import Reviewer
 from issueflow.run_service import GitWorkspacePreparer, RunService
@@ -46,6 +48,17 @@ def make_budget() -> Budget:
         max_output_tokens=2_000,
         max_cost_usd=0.10,
     )
+
+
+def test_run_service_has_one_architecture_constructor_contract():
+    assert list(signature(RunService).parameters) == [
+        "catalog",
+        "store",
+        "workspace_preparer",
+        "sandbox",
+        "architecture_factory",
+        "reviewer",
+    ]
 
 
 class LocalWorkspacePreparer:
@@ -100,9 +113,15 @@ class VerificationTimeoutSandbox:
         return SandboxResult(124, "partial verification output", True, 1_000)
 
 
-class ExplodingAgentFactory:
-    def __call__(self, case: BenchmarkCase, workspace: Path):
-        raise AssertionError("agent must not run when reproduction passes")
+class ExplodingArchitectureFactory:
+    def __call__(
+        self,
+        kind: ArchitectureKind,
+        case: BenchmarkCase,
+        workspace: Path,
+    ):
+        del kind, case, workspace
+        raise AssertionError("architecture must not run when reproduction passes")
 
 
 class RepairingAgent:
@@ -164,7 +183,7 @@ def test_successful_run_persists_full_evidence_and_advisory_review(tmp_path):
         store=store,
         workspace_preparer=LocalWorkspacePreparer(tmp_path / "workspaces"),
         sandbox=sandbox,
-        agent_factory=lambda case, workspace: RepairingAgent(),
+        architecture_factory=lambda _kind, case, workspace: SingleArchitecture(RepairingAgent()),
         reviewer=Reviewer(NeedsChangesModel()),
     )
 
@@ -209,7 +228,9 @@ def test_invalid_parsed_review_persists_usage_without_overriding_success(tmp_pat
         store=store,
         workspace_preparer=LocalWorkspacePreparer(tmp_path / "workspaces"),
         sandbox=SequenceSandbox([1, 0]),
-        agent_factory=lambda selected_case, workspace: RepairingAgent(),
+        architecture_factory=lambda _kind, selected_case, workspace: SingleArchitecture(
+            RepairingAgent()
+        ),
         reviewer=Reviewer(InvalidParsedReviewModel(usage)),
     )
 
@@ -306,7 +327,9 @@ def test_budget_exhaustion_is_terminal_and_persisted(tmp_path):
         store=store,
         workspace_preparer=LocalWorkspacePreparer(tmp_path / "workspaces"),
         sandbox=SequenceSandbox([1]),
-        agent_factory=lambda case, workspace: BudgetExhaustedAgent(),
+        architecture_factory=lambda _kind, case, workspace: SingleArchitecture(
+            BudgetExhaustedAgent()
+        ),
         reviewer=Reviewer(),
     )
 
@@ -328,7 +351,7 @@ def test_unhandled_failure_still_finishes_persisted_run(tmp_path):
         store=store,
         workspace_preparer=BrokenWorkspacePreparer(),
         sandbox=SequenceSandbox([]),
-        agent_factory=lambda case, workspace: RepairingAgent(),
+        architecture_factory=lambda _kind, case, workspace: SingleArchitecture(RepairingAgent()),
         reviewer=Reviewer(),
     )
 
@@ -405,7 +428,7 @@ def test_reproduction_that_unexpectedly_passes_stops_before_agent(tmp_path):
         store=store,
         workspace_preparer=LocalWorkspacePreparer(tmp_path / "workspaces"),
         sandbox=SequenceSandbox([0]),
-        agent_factory=ExplodingAgentFactory(),
+        architecture_factory=ExplodingArchitectureFactory(),
         reviewer=Reviewer(),
     )
 
@@ -424,7 +447,7 @@ def test_verification_timeout_is_persisted_as_timed_out(tmp_path):
         store=store,
         workspace_preparer=LocalWorkspacePreparer(tmp_path / "workspaces"),
         sandbox=VerificationTimeoutSandbox(),
-        agent_factory=lambda case, workspace: RepairingAgent(),
+        architecture_factory=lambda _kind, case, workspace: SingleArchitecture(RepairingAgent()),
         reviewer=Reviewer(),
     )
 
