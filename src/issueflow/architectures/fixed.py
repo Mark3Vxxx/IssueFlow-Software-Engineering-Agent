@@ -100,10 +100,16 @@ class FixedMultiAgentArchitecture:
                 final_message="" if feedback is None else feedback.feedback,
             )
 
-        role_workspace = self.roles.workspace
-        expected_workspace = self.tools.workspace if self.tools is not None else role_workspace
-        if expected_workspace is not None and workspace.resolve() != expected_workspace:
-            return finish(RunStatus.FAILED, "workspace_mismatch")
+        executors = [
+            executor
+            for executor in (self.roles.executor, self.tools)
+            if executor is not None
+        ]
+        for executor in executors:
+            if workspace.resolve() != executor.workspace:
+                return finish(RunStatus.FAILED, "workspace_mismatch")
+            if executor.case != case:
+                return finish(RunStatus.FAILED, "case_mismatch")
 
         run_roles = self.roles.for_run(budget, elapsed_seconds)
 

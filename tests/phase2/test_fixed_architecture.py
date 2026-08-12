@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
+from subprocess import TimeoutExpired
 
 import pytest
 from pydantic import ValidationError
@@ -494,6 +495,141 @@ def test_fixed_checks_workspace_of_prebuilt_production_roles(case, tmp_path, bud
 
     assert result.status is RunStatus.FAILED
     assert result.stop_reason == "workspace_mismatch"
+
+
+def test_fixed_checks_role_workspace_when_separate_tools_are_also_supplied(
+    case, tmp_path, budget
+):
+    role_workspace = tmp_path / "roles"
+    role_workspace.mkdir()
+    requested_workspace = tmp_path / "requested"
+    requested_workspace.mkdir()
+    roles = RoleSet.production(
+        ProductionRoleModel(), ToolExecutor(role_workspace, case, Sandbox())
+    )
+    requested_tools = ToolExecutor(requested_workspace, case, Sandbox())
+
+    result = FixedMultiAgentArchitecture(roles=roles, tools=requested_tools).run(
+        case,
+        requested_workspace,
+        budget,
+        RunContext(run_id="fixed-dual-executor-workspace-mismatch"),
+    )
+
+    assert result.status is RunStatus.FAILED
+    assert result.stop_reason == "workspace_mismatch"
+
+
+def test_fixed_rejects_executor_bound_to_a_different_case(case, tmp_path, budget):
+    other_case = case.model_copy(
+        update={
+            "id": "constructed-02",
+            "reproduce_command": "python -c 'print(\"different\")'",
+            "verify_command": "python -c 'raise SystemExit(2)'",
+        }
+    )
+    roles = RoleSet.production(
+        ProductionRoleModel(), ToolExecutor(tmp_path, other_case, Sandbox())
+    )
+
+    result = FixedMultiAgentArchitecture(roles=roles).run(
+        case,
+        tmp_path,
+        budget,
+        RunContext(run_id="fixed-executor-case-mismatch"),
+    )
+
+    assert result.status is RunStatus.FAILED
+    assert result.stop_reason == "case_mismatch"
+
+
+class SubprocessTimeoutTools(ToolExecutor):
+    def __init__(self, workspace, case):
+        super().__init__(workspace, case, sandbox=Sandbox())
+        self.calls = []
+
+    def execute(self, action, timeout_seconds=60):
+        self.calls.append(action)
+        raise TimeoutExpired(cmd=action.tool or "unknown", timeout=timeout_seconds)
+
+
+class RetrieverTimeoutModel:
+    def complete(self, system_prompt, payload, schema):
+        if schema is PlanOutput:
+            value = PlanOutput(steps=["Find the broken implementation"])
+        elif schema is EvidenceBundle:
+            value = EvidenceBundle(
+                tool_calls=[{"tool": "search", "arguments": {"query": "broken"}}]
+            )
+        else:
+            raise AssertionError("Coder must not start after Retriever timeout")
+        return StructuredCompletion(value=value, usage=Usage(model_calls=1))
+
+
+def test_retriever_subprocess_timeout_preserves_model_and_tool_usage(
+    case, tmp_path, budget
+):
+    tools = SubprocessTimeoutTools(tmp_path, case)
+
+    result = FixedMultiAgentArchitecture(model=RetrieverTimeoutModel(), tools=tools).run(
+        case,
+        tmp_path,
+        budget,
+        RunContext(run_id="fixed-retriever-subprocess-timeout"),
+    )
+
+    assert result.status is RunStatus.TIMED_OUT
+    assert result.stop_reason == "time_budget_exhausted"
+    assert result.usage.model_calls == 2
+    assert result.usage.tool_calls == 1
+    assert result.usage.patch_attempts == 0
+    assert result.role_usage[RoleName.RETRIEVER].model_calls == 1
+    assert result.role_usage[RoleName.RETRIEVER].tool_calls == 1
+    assert [step.role for step in result.steps] == ["planner", "retriever"]
+
+
+class CoderTimeoutModel:
+    def complete(self, system_prompt, payload, schema):
+        if schema is PlanOutput:
+            value = PlanOutput(steps=["Patch the broken implementation"])
+        elif schema is EvidenceBundle:
+            value = EvidenceBundle()
+        elif schema is CoderOutput:
+            value = CoderOutput(
+                current_diff="bounded attempted diff",
+                tool_calls=[
+                    {
+                        "tool": "apply_patch",
+                        "arguments": {"patch": "not executed because subprocess times out"},
+                    }
+                ],
+            )
+        else:
+            raise AssertionError("Reviewer must not start after Coder timeout")
+        return StructuredCompletion(value=value, usage=Usage(model_calls=1))
+
+
+def test_coder_subprocess_timeout_preserves_model_tool_and_patch_usage(
+    case, tmp_path, budget
+):
+    tools = SubprocessTimeoutTools(tmp_path, case)
+
+    result = FixedMultiAgentArchitecture(model=CoderTimeoutModel(), tools=tools).run(
+        case,
+        tmp_path,
+        budget,
+        RunContext(run_id="fixed-coder-subprocess-timeout"),
+    )
+
+    assert result.status is RunStatus.TIMED_OUT
+    assert result.stop_reason == "time_budget_exhausted"
+    assert result.usage.model_calls == 3
+    assert result.usage.tool_calls == 1
+    assert result.usage.patch_attempts == 1
+    assert result.role_usage[RoleName.CODER].model_calls == 1
+    assert result.role_usage[RoleName.CODER].tool_calls == 1
+    assert result.role_usage[RoleName.CODER].patch_attempts == 1
+    assert [step.role for step in result.steps] == ["planner", "retriever", "coder"]
 
 
 @pytest.mark.parametrize(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from subprocess import TimeoutExpired
 from time import monotonic
 from typing import TypeAlias
 
@@ -107,8 +108,14 @@ class RoleSet:
     @property
     def workspace(self):
         """Expose a production set's executor workspace for the architecture safety check."""
+        executor = self.executor
+        return None if executor is None else executor.workspace
+
+    @property
+    def executor(self) -> ToolExecutor | None:
+        """Expose the executor actually bound to all four production callables."""
         owner = self._production_owner()
-        return None if owner is None else owner.tools.workspace
+        return None if owner is None else owner.tools
 
     def _production_owner(self) -> _ProductionRoles | None:
         owners = [
@@ -170,7 +177,7 @@ class _ProductionRoles:
                     ModelAction(tool=call.tool, arguments=call.arguments),
                     timeout_seconds=self._tool_timeout_seconds(),
                 )
-            except TimeoutError:
+            except (TimeoutError, TimeoutExpired):
                 stop_reason = "time_budget_exhausted"
                 break
             except (FileNotFoundError, NotImplementedError, OSError, RuntimeError, TypeError, ValueError):
@@ -219,7 +226,7 @@ class _ProductionRoles:
                     ModelAction(tool=call.tool, arguments=call.arguments),
                     timeout_seconds=self._tool_timeout_seconds(),
                 )
-            except TimeoutError:
+            except (TimeoutError, TimeoutExpired):
                 stop_reason = "time_budget_exhausted"
                 break
             except (FileNotFoundError, NotImplementedError, OSError, RuntimeError, TypeError, ValueError):
