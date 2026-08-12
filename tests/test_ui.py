@@ -513,6 +513,7 @@ def test_runtime_wires_each_cases_registered_commands_into_its_agent(tmp_path):
         api_key=SecretStr("test-key"),
         model="deepseek-v4-flash",
         base_url="https://api.deepseek.com",
+        temperature=1.25,
     )
 
     store, service = build_runtime(Path.cwd(), tmp_path / "data", settings)
@@ -524,6 +525,7 @@ def test_runtime_wires_each_cases_registered_commands_into_its_agent(tmp_path):
 
     assert store.database_path == tmp_path / "data" / "issueflow.sqlite3"
     assert agent.model.test_commands == (case.reproduce_command,)
+    assert agent.model.temperature == 1.25
 
 
 def test_app_explains_how_to_configure_a_missing_api_key(monkeypatch):

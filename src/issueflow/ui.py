@@ -340,6 +340,7 @@ def build_runtime(
             model=settings.model,
             base_url=settings.base_url,
             test_commands=commands,
+            temperature=settings.temperature,
         )
         return SingleAgent(model, ToolExecutor(workspace, case, sandbox))
 

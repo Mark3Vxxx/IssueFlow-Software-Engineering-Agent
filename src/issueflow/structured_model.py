@@ -92,6 +92,7 @@ class DeepSeekStructuredModel:
         schema: type[T],
     ) -> StructuredCompletion[T]:
         """Request one JSON object and validate it without retaining raw output on errors."""
+        response: httpx.Response | None = None
         try:
             response = self.http_client.post(
                 f"{self.base_url}/chat/completions",
@@ -112,8 +113,11 @@ class DeepSeekStructuredModel:
                 },
             )
             response.raise_for_status()
-        except httpx.HTTPError as error:
-            raise ModelProtocolError("model_request_failed", Usage()) from error
+        except httpx.HTTPError:
+            response = None
+
+        if response is None:
+            raise ModelProtocolError("model_request_failed", Usage(model_calls=1))
 
         response_payload = self._response_payload(response)
         usage = self._usage(response_payload)
