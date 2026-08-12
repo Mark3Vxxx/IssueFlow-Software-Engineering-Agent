@@ -46,6 +46,18 @@ class Budget(BaseModel):
     max_cost_usd: PositiveFloat
 
 
+class Usage(BaseModel):
+    """Dependency-neutral metrics for one agent or architecture run."""
+
+    model_calls: NonNegativeInt = 0
+    tool_calls: NonNegativeInt = 0
+    patch_attempts: NonNegativeInt = 0
+    input_tokens: NonNegativeInt = 0
+    output_tokens: NonNegativeInt = 0
+    cost_usd: NonNegativeFloat = 0.0
+    duration_ms: NonNegativeInt = 0
+
+
 class BenchmarkCase(BaseModel):
     """A reproducible issue-repair sample from the approved catalog."""
 
