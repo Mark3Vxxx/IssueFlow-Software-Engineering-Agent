@@ -176,6 +176,33 @@ def test_agent_stops_at_patch_attempt_budget(tmp_path):
     assert result.patch_attempts == 1
 
 
+def test_medium_profile_allows_four_patches_and_blocks_the_fifth(tmp_path):
+    from issueflow.budget import budget_for_case
+
+    target = tmp_path / "engine.py"
+    target.write_text("state = 0\n", encoding="utf-8")
+    case = make_case().model_copy(update={"budget_profile": "medium"})
+    actions = [
+        structured_patch("engine.py", f"state = {value}\n", f"state = {value + 1}\n")
+        for value in range(5)
+    ]
+    agent = SingleAgent(FakeModel(actions), ToolExecutor(tmp_path, case, None))
+
+    result = agent.run(case, tmp_path, budget_for_case(case))
+
+    assert result.status is RunStatus.BUDGET_EXHAUSTED
+    assert result.stop_reason == "patch_budget_exhausted"
+    assert result.patch_attempts == 4
+    assert target.read_text(encoding="utf-8") == "state = 4\n"
+    assert [step.status for step in result.steps] == [
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "budget_exhausted",
+    ]
+
+
 def test_run_tests_uses_sandbox_for_registered_command(tmp_path):
     sandbox = FakeSandbox()
     case = make_case()
