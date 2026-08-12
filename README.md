@@ -97,6 +97,18 @@ All five cases use [karpathy/micrograd](https://github.com/karpathy/micrograd), 
 
 ## Safety boundary
 
+### Budget profiles
+
+Every catalog case declares a profile: `historical-01` is `medium`, and the current constructed cases are `small`.
+
+| Profile | Tools | Patches | Seconds | Input tokens | Output tokens | Cost cap |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `small` | 12 | 2 | 300 | 30,000 | 6,000 | $0.05 |
+| `medium` | 18 | 4 | 450 | 50,000 | 8,000 | $0.10 |
+| `large` | 24 | 6 | 600 | 80,000 | 12,000 | $0.20 |
+
+Higher budgets increase available work but never guarantee a successful repair.
+
 - The phase-one UI accepts only the five catalog cases; it does not accept arbitrary repositories or shell commands.
 - Docker runs with networking disabled, a read-only container filesystem, bounded CPU, memory, processes, and time, with only the isolated workspace writable.
 - Model tools and test commands are allowlisted; paths are checked against workspace escape.
