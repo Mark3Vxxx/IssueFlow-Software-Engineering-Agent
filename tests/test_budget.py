@@ -5,7 +5,6 @@ import pytest
 from issueflow.benchmark import load_catalog
 from issueflow.budget import budget_for_case
 
-
 EXPECTED = {
     "small": {
         "max_tool_calls": 12,

@@ -6,7 +6,6 @@ from typing import Final
 
 from issueflow.models import BenchmarkCase, Budget
 
-
 BUDGET_PROFILES: Final[Mapping[str, Budget]] = MappingProxyType(
     {
         "small": Budget(
