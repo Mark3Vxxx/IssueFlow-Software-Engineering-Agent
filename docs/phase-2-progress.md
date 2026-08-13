@@ -4,16 +4,15 @@ Update this table only from verified milestone gates.
 
 | Milestone | Tasks done | Verification | Paid spend | Status |
 | --- | ---: | --- | ---: | --- |
-| 2A Architectures | 8/8 | Tests PASS; final review open | CNY 0 | Blocked |
+| 2A Architectures | 8/8 | Tests PASS; reviewer-budget fix reviewed clean | CNY 0 | Complete |
 | 2B Benchmark | 0/8 | 0/20 strict × 3 | CNY 0 | Not started |
 | 2C Experiments | 0/10 | 0/160 trials | CNY 0 | Not started |
 | 2D Results | 0/6 | Not run | CNY 0 | Not started |
 
 ## 当前快照（2026-08-13）
 
-- 工作分支：`codex/phase-2a`
-- 当前提交：`5b72aaf`（`fix: close phase 2a final review findings`）
-- 2A 的 8 个实施任务已经完成，但最终独立复审仍有一个承重问题，因此里程碑状态是 `Blocked`，不能合并或进入付费实验。
+- 工作分支：`main`（2A 已合并；Reviewer 统一预算收尾修复待提交）
+- 2A 的 8 个实施任务已完成，Reviewer 统一预算阻塞项已关闭，并通过独立复审（无 Critical/Important 发现），里程碑状态为 `Complete`。
 - 当前累计付费 API 支出：`CNY 0`。所有现有架构验证均使用确定性脚本模型。
 
 ## 已验证证据
@@ -28,32 +27,22 @@ Update this table only from verified milestone gates.
 
 这些证据分为三层：兼容参考补丁重放验证数据集合同（`5/5`）；单夹具 E2E 验证四种架构共用的基础设施链路（`4/4`）；兼容矩阵使用逐案例的确定性决策，通过真实 RunService、Git、Docker、独立验证、SQLite 和 JSON 验证集成广度（`20/20`）。矩阵不会读取或应用参考补丁，也不代表自主模型质量。
 
-## 当前阻塞项
+## 已关闭的阻塞项（Reviewer 统一预算）
 
-外层 Reviewer 尚未被严格纳入同一个案例级预算：
+外层 Reviewer 现已严格纳入同一个案例级预算，四个缺口均已修复并验证：
 
-- Reviewer HTTP 调用没有接收 RunService 计算出的剩余超时时间。
-- Reviewer 的真实墙钟耗时没有可靠写入 `Usage.duration_ms`。
-- 当剩余输入 token、输出 token、成本或时间预算为零时，RunService 尚未在调用前硬性拒绝 Reviewer。
-- 调用后的预算超限已经能够归一化，但仅靠事后检查不能满足“每个调用在统一预算内准入”的要求。
+- Reviewer 请求边界接收 RunService 计算的剩余超时时间。
+- Reviewer 真实墙钟耗时写入 `Usage.duration_ms`。
+- 剩余时间 / token / 成本预算为零时，RunService 调用前即跳过 Reviewer。
+- 调用前统一准入 + 调用后超限归一化并存，语义明确。
 
-在此问题关闭并通过新的独立复审前，不应把 2A 标记为 `Complete`。
+独立复审结论：无 Critical / Important 发现；仅三处既有模式的小项（`_remaining_seconds` 向上取整、既有 `>=` 时间检查、浮点成本比较），不在本次修复范围内。
 
 ## 后续任务
 
-### 2A 收尾修复
+### 2A 收尾修复（已完成，待提交）
 
-1. 编写独立的 Reviewer 统一预算收尾计划，避免在已耗尽的最终修复波中继续追加修改。
-2. 用 TDD 增加以下回归测试：
-   - 剩余时间被传给 Reviewer 请求边界；
-   - Reviewer 墙钟时间计入总用量；
-   - token、成本或时间余额为零时不发起 Reviewer 调用；
-   - 精确等于预算上限时行为明确；
-   - Reviewer 调用超时或调用后超预算时，终态和 `functional_success` 正确归一化；
-   - 失败和跳过路径继续保持凭据脱敏与权威用量持久化。
-3. 重新运行 Phase 1、Phase 2、`4 × 5` 矩阵、凭据扫描和 `git diff --check`。
-4. 请求新的整分支独立审查。只有没有 Critical/Important 发现时，才把 2A 更新为 `Complete`。
-5. 由用户选择本地合并、推送并创建 PR，或保留分支。
+Reviewer 统一预算收尾已完成：独立计划见 `docs/superpowers/plans/2026-08-13-issueflow-reviewer-unified-budget.md`；六个回归测试全部落地并通过；Phase 1 / Phase 2 / 兼容矩阵 / 凭据扫描 / `git diff --check` 全绿；独立复审无 Critical / Important 发现。待用户确认提交后 2A 正式关闭。
 
 ### 2B Benchmark Expansion
 
