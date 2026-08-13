@@ -1,0 +1,28 @@
+{
+  "case_id": "mingpt-h01",
+  "accepted_split": "strict",
+  "reasons": [],
+  "replays": [
+    {
+      "replay": 1,
+      "reproduction": "FAIL_AS_EXPECTED",
+      "public_verification": "PASS",
+      "hidden_verification": "PASS"
+    },
+    {
+      "replay": 2,
+      "reproduction": "FAIL_AS_EXPECTED",
+      "public_verification": "PASS",
+      "hidden_verification": "PASS"
+    },
+    {
+      "replay": 3,
+      "reproduction": "FAIL_AS_EXPECTED",
+      "public_verification": "PASS",
+      "hidden_verification": "PASS"
+    }
+  ],
+  "environment_id": "mingpt",
+  "revision": "5433de6158cc8bf9f1bf6c79b4e408292d6bc394",
+  "reference_patch_sha256": "f7b3a252e5e727edd2b7472f94090c4f1c99834ff8f22ec38b15ecddc4d3b775"
+}

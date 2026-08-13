@@ -1,2 +1,22 @@
 dataset_split: strict
-cases: []
+cases:
+  - id: mingpt-h01
+    dataset_split: strict
+    repository_id: mingpt
+    environment_id: mingpt
+    kind: historical
+    budget_profile: small
+    difficulty: small
+    issue_category: numerical
+    repository_url: https://github.com/karpathy/minGPT
+    revision: 5433de6158cc8bf9f1bf6c79b4e408292d6bc394
+    license: MIT
+    issue: top_k_logits masks sub-top-k logits to 1e-10 instead of negative infinity, giving excluded tokens a non-zero sampling probability.
+    source_url: https://github.com/karpathy/minGPT/commit/8909e1b646d6fd5235ec33259fb22fdc2c91037c
+    reproduce_command: python -c "import torch; from mingpt.utils import top_k_logits; out = top_k_logits(torch.tensor([[5.0, 3.0, 1.0]]), 1); assert out[0, 1] == float('-inf') and out[0, 2] == float('-inf'), out"
+    verify_command: python -c "import torch; from mingpt.utils import top_k_logits; out = top_k_logits(torch.tensor([[5.0, 3.0, 1.0]]), 1); assert out[0, 1] == float('-inf') and out[0, 2] == float('-inf'), out"
+    reference_patch: mingpt-h01/reference.patch
+    construction_notes: Historical repair from commit 8909e1b; sampling mask used 1e-10 instead of -inf.
+    hidden_test_path: mingpt-h01/test_hidden.py
+    hidden_verify_command: python -m pytest /issueflow-hidden/test_hidden.py
+    fixed_revision: 8909e1b646d6fd5235ec33259fb22fdc2c91037c
