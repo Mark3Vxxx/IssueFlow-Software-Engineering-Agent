@@ -8,11 +8,16 @@ import yaml
 from issueflow.benchmark import load_catalog
 
 
-def make_case(case_id: str, kind: str, budget_profile: str) -> dict[str, str]:
+def make_case(case_id: str, kind: str, budget_profile: str) -> dict[str, object]:
     case = {
         "id": case_id,
+        "dataset_split": "compatibility",
+        "repository_id": "micrograd",
+        "environment_id": "micrograd",
         "kind": kind,
         "budget_profile": budget_profile,
+        "difficulty": budget_profile,
+        "issue_category": "numerical" if kind == "constructed" else "model_training",
         "repository_url": "https://github.com/karpathy/micrograd",
         "revision": "a" * 40,
         "license": "MIT",
@@ -28,18 +33,19 @@ def make_case(case_id: str, kind: str, budget_profile: str) -> dict[str, str]:
     return case
 
 
-def test_catalog_accepts_one_historical_and_four_constructed_cases(tmp_path):
-    catalog_path = tmp_path / "micrograd.yaml"
+def test_catalog_accepts_the_compatibility_mix_in_declared_order(tmp_path):
+    catalog_path = tmp_path / "compatibility.yaml"
     catalog_path.write_text(
         yaml.safe_dump(
             {
+                "dataset_split": "compatibility",
                 "cases": [
                     make_case("historical-01", "historical", "medium"),
                     make_case("constructed-01", "constructed", "small"),
                     make_case("constructed-02", "constructed", "small"),
                     make_case("constructed-03", "constructed", "small"),
                     make_case("constructed-04", "constructed", "small"),
-                ]
+                ],
             }
         ),
         encoding="utf-8",
@@ -63,11 +69,14 @@ def test_catalog_accepts_one_historical_and_four_constructed_cases(tmp_path):
     }
 
 
-def test_catalog_rejects_any_other_sample_mix(tmp_path):
-    catalog_path = tmp_path / "micrograd.yaml"
-    catalog_path.write_text(yaml.safe_dump({"cases": []}), encoding="utf-8")
+def test_catalog_rejects_an_empty_case_list(tmp_path):
+    catalog_path = tmp_path / "empty.yaml"
+    catalog_path.write_text(
+        yaml.safe_dump({"dataset_split": "compatibility", "cases": []}),
+        encoding="utf-8",
+    )
 
-    with pytest.raises(ValueError, match="1 historical and 4 constructed"):
+    with pytest.raises(ValueError, match="at least one case"):
         load_catalog(catalog_path)
 
 
@@ -84,4 +93,4 @@ def test_verify_script_reports_an_invalid_catalog(tmp_path):
     )
 
     assert result.returncode == 2
-    assert "1 historical and 4 constructed" in result.stderr
+    assert "dataset_split" in result.stderr

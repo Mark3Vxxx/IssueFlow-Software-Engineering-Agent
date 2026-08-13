@@ -25,7 +25,7 @@ docker-build:
 	docker build --tag issueflow-micrograd:dev --file docker/Dockerfile.micrograd .
 
 verify-benchmarks:
-	$(PYTHON) scripts/verify_benchmarks.py --catalog benchmarks/micrograd.yaml
+	$(PYTHON) scripts/verify_benchmarks.py --catalog benchmarks/catalogs/compatibility.yaml
 
 verify-phase-1:
 	$(MAKE) lint

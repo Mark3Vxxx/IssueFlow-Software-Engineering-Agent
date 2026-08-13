@@ -16,7 +16,7 @@ from issueflow.architectures.base import (
     RoleName,
     RunContext,
 )
-from issueflow.models import BenchmarkCase, Budget, RunStatus, TraceStep, Usage
+from issueflow.models import AgentCaseView, BenchmarkCase, Budget, RunStatus, TraceStep, Usage
 from issueflow.structured_model import ModelProtocolError, StructuredModel
 
 MAX_REPOSITORY_PATHS = 120
@@ -92,7 +92,7 @@ class DirectArchitecture:
         if workspace.resolve() != self.tools.workspace:
             return finish(RunStatus.FAILED, "patch_application_failure")
 
-        payload = _build_payload(case.issue, workspace)
+        payload = _build_payload(case.agent_view(), workspace)
         elapsed = self.clock() - started_at
         if elapsed >= budget.max_seconds:
             return finish(
@@ -261,10 +261,10 @@ class DirectArchitecture:
         )
 
 
-def _build_payload(issue: str, workspace: Path) -> dict[str, object]:
+def _build_payload(view: AgentCaseView, workspace: Path) -> dict[str, object]:
     """Return deterministic repository context that fits all Direct input caps."""
     payload: dict[str, object] = {
-        "issue": _bounded_issue(issue),
+        "issue": _bounded_issue(view.issue),
         "repository_map": [],
     }
     repository_map: list[dict[str, str]] = payload["repository_map"]  # type: ignore[assignment]

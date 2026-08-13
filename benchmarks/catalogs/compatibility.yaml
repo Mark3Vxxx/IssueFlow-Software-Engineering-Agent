@@ -1,5 +1,3 @@
-# Deprecated compatibility shim. Production paths load
-# benchmarks/catalogs/compatibility.yaml instead. Delete this file in phase three.
 dataset_split: compatibility
 cases:
   - id: historical-01

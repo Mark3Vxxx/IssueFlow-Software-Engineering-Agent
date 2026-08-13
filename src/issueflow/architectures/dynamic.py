@@ -129,10 +129,11 @@ class DynamicSupervisorArchitecture:
                 return finish(RunStatus.FAILED, "case_mismatch")
 
         run_roles = self.roles.for_run(budget, elapsed_seconds)
+        view = case.agent_view()
         initial_state = validate_workflow_state(
             {
-                "case_id": case.id,
-                "issue": case.issue,
+                "case_id": view.id,
+                "issue": view.issue,
                 "plan": None,
                 "evidence": [],
                 "current_diff": "",

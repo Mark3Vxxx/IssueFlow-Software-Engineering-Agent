@@ -34,7 +34,7 @@ EXPECTED = {
 
 
 def test_budget_profiles_have_the_documented_limits():
-    catalog = load_catalog(Path("benchmarks/micrograd.yaml"))
+    catalog = load_catalog(Path("benchmarks/catalogs/compatibility.yaml"))
     historical = catalog["historical-01"]
     constructed = catalog["constructed-01"]
 
@@ -43,7 +43,7 @@ def test_budget_profiles_have_the_documented_limits():
 
 
 def test_budget_resolution_returns_independent_objects():
-    case = load_catalog(Path("benchmarks/micrograd.yaml"))["historical-01"]
+    case = load_catalog(Path("benchmarks/catalogs/compatibility.yaml"))["historical-01"]
 
     first = budget_for_case(case)
     second = budget_for_case(case)
@@ -55,8 +55,8 @@ def test_budget_resolution_returns_independent_objects():
 
 @pytest.mark.parametrize("profile", ["small", "medium", "large"])
 def test_every_named_profile_resolves_to_its_documented_limits(profile):
-    case = load_catalog(Path("benchmarks/micrograd.yaml"))["constructed-01"].model_copy(
-        update={"budget_profile": profile}
-    )
+    case = load_catalog(Path("benchmarks/catalogs/compatibility.yaml"))[
+        "constructed-01"
+    ].model_copy(update={"budget_profile": profile})
 
     assert budget_for_case(case).model_dump() == EXPECTED[profile]

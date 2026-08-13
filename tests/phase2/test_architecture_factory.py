@@ -33,6 +33,11 @@ class StaticSandbox:
 def case() -> BenchmarkCase:
     return BenchmarkCase(
         id="constructed-01",
+        dataset_split="compatibility",
+        repository_id="micrograd",
+        environment_id="micrograd",
+        difficulty="small",
+        issue_category="numerical",
         kind="constructed",
         budget_profile="small",
         repository_url="https://github.com/karpathy/micrograd",

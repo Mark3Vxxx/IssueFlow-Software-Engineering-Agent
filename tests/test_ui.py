@@ -41,7 +41,7 @@ def test_stop_reason_redacts_unknown_technical_text():
 
 
 def test_budget_summary_contains_profile_and_every_limit():
-    case = load_catalog(Path("benchmarks/micrograd.yaml"))["historical-01"]
+    case = load_catalog(Path("benchmarks/catalogs/compatibility.yaml"))["historical-01"]
     budget = budget_for_case(case)
 
     assert format_budget_summary(case, budget) == (
@@ -53,6 +53,11 @@ def test_budget_summary_contains_profile_and_every_limit():
 def test_case_view_distinguishes_constructed_samples_from_historical_repairs():
     case = BenchmarkCase(
         id="constructed-01",
+        dataset_split="compatibility",
+        repository_id="micrograd",
+        environment_id="micrograd",
+        difficulty="small",
+        issue_category="numerical",
         kind="constructed",
         budget_profile="small",
         repository_url="https://github.com/karpathy/micrograd",
@@ -76,6 +81,11 @@ def test_case_view_distinguishes_constructed_samples_from_historical_repairs():
 def test_case_view_labels_historical_repairs_explicitly():
     case = BenchmarkCase(
         id="historical-01",
+        dataset_split="compatibility",
+        repository_id="micrograd",
+        environment_id="micrograd",
+        difficulty="medium",
+        issue_category="model_training",
         kind="historical",
         budget_profile="medium",
         repository_url="https://github.com/karpathy/micrograd",
@@ -97,6 +107,11 @@ def test_case_view_labels_historical_repairs_explicitly():
 def test_case_view_translates_latest_run_status_for_the_workbench():
     case = BenchmarkCase(
         id="constructed-01",
+        dataset_split="compatibility",
+        repository_id="micrograd",
+        environment_id="micrograd",
+        difficulty="small",
+        issue_category="numerical",
         kind="constructed",
         budget_profile="small",
         repository_url="https://github.com/karpathy/micrograd",
@@ -440,7 +455,7 @@ from issueflow.ui import render_app
 
 
 class StaticService:
-    catalog = load_catalog(Path("benchmarks/micrograd.yaml"))
+    catalog = load_catalog(Path("benchmarks/catalogs/compatibility.yaml"))
 
 
 class EmptyStore:
@@ -479,7 +494,7 @@ from issueflow.ui import render_app
 
 
 class StaticService:
-    catalog = load_catalog(Path("benchmarks/micrograd.yaml"))
+    catalog = load_catalog(Path("benchmarks/catalogs/compatibility.yaml"))
 
     def start(self, case_id, budget, architecture):
         assert case_id == "historical-01"
@@ -604,7 +619,7 @@ from issueflow.ui import render_app
 
 
 class StaticService:
-    catalog = load_catalog(Path("benchmarks/micrograd.yaml"))
+    catalog = load_catalog(Path("benchmarks/catalogs/compatibility.yaml"))
 
     def start(self, case_id, budget, architecture):
         return RunRecord(

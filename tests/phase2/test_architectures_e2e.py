@@ -41,7 +41,7 @@ SHARED_BUDGET = Budget(
     max_cost_usd=0.01,
 )
 
-COMPATIBILITY_CATALOG = Path(__file__).parents[2] / "benchmarks" / "micrograd.yaml"
+COMPATIBILITY_CATALOG = Path(__file__).parents[2] / "benchmarks" / "catalogs" / "compatibility.yaml"
 COMPATIBILITY_CASES = list(load_catalog(COMPATIBILITY_CATALOG).values())
 
 
@@ -439,6 +439,11 @@ def _make_local_benchmark(tmp_path: Path) -> tuple[BenchmarkCase, Path]:
     )
     case = BenchmarkCase(
         id="constructed-e2e",
+        dataset_split="compatibility",
+        repository_id="micrograd",
+        environment_id="micrograd",
+        difficulty="small",
+        issue_category="numerical",
         kind="constructed",
         budget_profile="small",
         repository_url=str(source),
@@ -545,7 +550,7 @@ def test_compatibility_matrix_uses_case_decisions_through_real_git_docker_and_st
         catalog={case.id: case},
         store=store,
         workspace_preparer=GitWorkspacePreparer(
-            tmp_path / "workspaces", COMPATIBILITY_CATALOG.parent
+            tmp_path / "workspaces", COMPATIBILITY_CATALOG.parent.parent
         ),
         sandbox=sandbox,
         architecture_factory=lambda kind, selected_case, workspace: factory.create(

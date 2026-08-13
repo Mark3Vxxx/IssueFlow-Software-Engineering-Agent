@@ -393,7 +393,7 @@ def build_runtime(
 ) -> tuple[TraceStore, RunService]:
     """Wire the production workbench without exposing credentials to the UI."""
     data_root.mkdir(parents=True, exist_ok=True)
-    catalog = load_catalog(project_root / "benchmarks/micrograd.yaml")
+    catalog = load_catalog(project_root / "benchmarks/catalogs/compatibility.yaml")
     store = TraceStore(data_root / "issueflow.sqlite3")
     sandbox = DockerSandbox()
     api_key = settings.api_key.get_secret_value()

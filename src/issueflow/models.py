@@ -35,6 +35,14 @@ class RunStatus(StrEnum):
         }
 
 
+class DatasetSplit(StrEnum):
+    """Evidence-quality bucket for a benchmark case."""
+
+    COMPATIBILITY = "compatibility"
+    STRICT = "strict"
+    EXPLORATORY = "exploratory"
+
+
 class Budget(BaseModel):
     """Hard per-run limits that prevent unbounded agent execution."""
 
@@ -58,10 +66,23 @@ class Usage(BaseModel):
     duration_ms: NonNegativeInt = 0
 
 
-class BenchmarkCase(BaseModel):
-    """A reproducible issue-repair sample from the approved catalog."""
+class AgentCaseView(BaseModel):
+    """The subset of a case exposed to Agent prompts and tool selection."""
 
     id: str
+    repository_id: str
+    issue: str
+    reproduce_command: str
+    verify_command: str
+
+
+class BenchmarkCase(BaseModel):
+    """A reproducible issue-repair sample from a dataset split."""
+
+    id: str
+    dataset_split: DatasetSplit
+    repository_id: str
+    environment_id: str
     kind: Literal["historical", "constructed"]
     budget_profile: Literal["small", "medium", "large"]
     repository_url: str
@@ -74,15 +95,41 @@ class BenchmarkCase(BaseModel):
     reference_patch: str
     construction_notes: str
     fault_patch: str | None = None
+    hidden_test_path: str | None = None
+    hidden_verify_command: str | None = None
+    fixed_revision: str | None = Field(default=None, pattern=r"^[0-9a-f]{40}$")
+    difficulty: Literal["small", "medium", "large"]
+    issue_category: Literal[
+        "data_config", "model_training", "test_boundary", "numerical", "performance", "refactor"
+    ]
 
     @model_validator(mode="after")
     def validate_sample_provenance(self) -> "BenchmarkCase":
-        """Require an explicit fault source for every constructed sample."""
+        """Enforce provenance and strict-split answer-isolation rules."""
         if self.kind == "constructed" and not self.fault_patch:
             raise ValueError("constructed cases require fault_patch")
         if self.kind == "historical" and self.fault_patch:
             raise ValueError("historical cases must not define fault_patch")
+        if self.dataset_split is DatasetSplit.STRICT:
+            if self.kind != "historical":
+                raise ValueError("strict cases must be historical")
+            if not self.hidden_test_path or not self.hidden_verify_command:
+                raise ValueError("strict cases require hidden validation")
+            if self.fixed_revision is None:
+                raise ValueError("strict cases require a fixed revision")
+            if not self.source_url.strip():
+                raise ValueError("strict cases require a source URL")
         return self
+
+    def agent_view(self) -> "AgentCaseView":
+        """Return only the fields an Agent is allowed to see."""
+        return AgentCaseView(
+            id=self.id,
+            repository_id=self.repository_id,
+            issue=self.issue,
+            reproduce_command=self.reproduce_command,
+            verify_command=self.verify_command,
+        )
 
 
 class TraceStep(BaseModel):

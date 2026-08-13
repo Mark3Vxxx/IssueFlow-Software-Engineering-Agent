@@ -7,8 +7,13 @@ from issueflow.models import BenchmarkCase, Budget, RunRecord, RunStatus, TraceS
 def valid_historical_case(**updates) -> dict[str, object]:
     values = {
         "id": "historical-01",
+        "dataset_split": "compatibility",
+        "repository_id": "micrograd",
+        "environment_id": "micrograd",
         "kind": "historical",
         "budget_profile": "medium",
+        "difficulty": "medium",
+        "issue_category": "model_training",
         "repository_url": "https://github.com/karpathy/micrograd",
         "revision": "a" * 40,
         "license": "MIT",
@@ -59,8 +64,13 @@ def test_benchmark_case_requires_a_full_lowercase_git_sha():
     with pytest.raises(ValidationError):
         BenchmarkCase(
             id="bad-revision",
+            dataset_split="compatibility",
+            repository_id="micrograd",
+            environment_id="micrograd",
             kind="historical",
             budget_profile="medium",
+            difficulty="medium",
+            issue_category="model_training",
             repository_url="https://github.com/karpathy/micrograd",
             revision="main",
             license="MIT",
@@ -95,8 +105,13 @@ def test_constructed_case_requires_a_fault_patch():
     with pytest.raises(ValidationError):
         BenchmarkCase(
             id="constructed-01",
+            dataset_split="compatibility",
+            repository_id="micrograd",
+            environment_id="micrograd",
             kind="constructed",
             budget_profile="small",
+            difficulty="small",
+            issue_category="numerical",
             repository_url="https://github.com/karpathy/micrograd",
             revision="a" * 40,
             license="MIT",

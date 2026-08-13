@@ -39,20 +39,20 @@ def run_case_command(command: str, workspace: Path) -> subprocess.CompletedProce
     )
 
 
-def verify_case(case: BenchmarkCase, catalog_path: Path, temporary_root: Path) -> tuple[bool, str]:
+def verify_case(case: BenchmarkCase, patch_root: Path, temporary_root: Path) -> tuple[bool, str]:
     """Return whether one sample fails before and passes after the documented patch."""
     workspace = temporary_root / case.id
     run_checked(["git", "clone", "--quiet", case.repository_url, str(workspace)], temporary_root)
     run_checked(["git", "checkout", "--quiet", case.revision], workspace)
 
     if case.fault_patch:
-        run_checked(["git", "apply", str(catalog_path.parent / case.fault_patch)], workspace)
+        run_checked(["git", "apply", str(patch_root / case.fault_patch)], workspace)
 
     reproduction = run_case_command(case.reproduce_command, workspace)
     if reproduction.returncode == 0:
         return False, "reproduction unexpectedly passed"
 
-    run_checked(["git", "apply", str(catalog_path.parent / case.reference_patch)], workspace)
+    run_checked(["git", "apply", str(patch_root / case.reference_patch)], workspace)
     verification = run_case_command(case.verify_command, workspace)
     if verification.returncode != 0:
         return False, verification.stderr.strip() or "verification command failed"
@@ -76,7 +76,7 @@ def main() -> int:
         temporary_root = Path(raw_temporary_root)
         for case in catalog.values():
             try:
-                passed, detail = verify_case(case, arguments.catalog, temporary_root)
+                passed, detail = verify_case(case, PROJECT_ROOT / "benchmarks", temporary_root)
             except RuntimeError as error:
                 passed, detail = False, str(error)
             outcome = "PASS" if passed else "FAIL"
