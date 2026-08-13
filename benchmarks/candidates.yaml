@@ -1,0 +1,37 @@
+candidates:
+  - repository: karpathy/minGPT
+    url: https://github.com/karpathy/minGPT
+    license: MIT
+    priority: 1
+    target_quota: 5
+    source_url: https://github.com/karpathy/minGPT
+  - repository: karpathy/nanoGPT
+    url: https://github.com/karpathy/nanoGPT
+    license: MIT
+    priority: 2
+    target_quota: 5
+    source_url: https://github.com/karpathy/nanoGPT
+  - repository: karpathy/build-nanogpt
+    url: https://github.com/karpathy/build-nanogpt
+    license: MIT
+    priority: 3
+    target_quota: 4
+    source_url: https://github.com/karpathy/build-nanogpt
+  - repository: tinygrad/tinygrad
+    url: https://github.com/tinygrad/tinygrad
+    license: MIT
+    priority: 4
+    target_quota: 6
+    source_url: https://github.com/tinygrad/tinygrad
+  - repository: karpathy/nanochat
+    url: https://github.com/karpathy/nanochat
+    license: MIT
+    priority: 5
+    target_quota: 0
+    source_url: https://github.com/karpathy/nanochat
+  - repository: karpathy/makemore
+    url: https://github.com/karpathy/makemore
+    license: MIT
+    priority: 6
+    target_quota: 0
+    source_url: https://github.com/karpathy/makemore
