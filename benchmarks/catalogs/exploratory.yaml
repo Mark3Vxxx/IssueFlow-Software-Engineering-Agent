@@ -1,2 +1,172 @@
 dataset_split: exploratory
-cases: []
+cases:
+  - id: nanogpt-x01
+    dataset_split: exploratory
+    repository_id: nanogpt
+    environment_id: nanogpt
+    kind: historical
+    budget_profile: small
+    difficulty: small
+    issue_category: data_config
+    repository_url: https://github.com/karpathy/nanoGPT
+    revision: 0d8fbd11aed59617f65d2bbd14842b4050516128
+    license: MIT
+    issue: decode function missing return statement (returns None instead of the string).
+    source_url: https://github.com/karpathy/nanoGPT/commit/36c7db8c44486cb543dcdc101dcc897ffede6be9
+    reproduce_command: "not applicable"
+    verify_command: "not applicable"
+    reference_patch: exploratory
+    construction_notes: Rejected strict gate - needs external data (input.txt is not checked in and must be downloaded).
+  - id: nanogpt-x02
+    dataset_split: exploratory
+    repository_id: nanogpt
+    environment_id: nanogpt
+    kind: historical
+    budget_profile: small
+    difficulty: small
+    issue_category: model_training
+    repository_url: https://github.com/karpathy/nanoGPT
+    revision: 038ce89438021daf5090b73283b022f5b1a6c985
+    license: MIT
+    issue: from_pretrained weight-loading assert tripped by missing .bias buffer.
+    source_url: https://github.com/karpathy/nanoGPT/commit/d995c221282ea45eb43abe7acf67ba834d5f1b60
+    reproduce_command: "not applicable"
+    verify_command: "not applicable"
+    reference_patch: exploratory
+    construction_notes: Rejected strict gate - needs network (downloads HuggingFace GPT-2 weights).
+  - id: nanogpt-x03
+    dataset_split: exploratory
+    repository_id: nanogpt
+    environment_id: nanogpt
+    kind: historical
+    budget_profile: small
+    difficulty: small
+    issue_category: refactor
+    repository_url: https://github.com/karpathy/nanoGPT
+    revision: 8b1e43209e4da8162c05531e7bf46ac6d8d6773f
+    license: MIT
+    issue: MFU calculation incorrectly multiplied by world_size.
+    source_url: https://github.com/karpathy/nanoGPT/commit/e58f0cfa9466dafe226b51ce6678e2b8fac652d5
+    reproduce_command: "not applicable"
+    verify_command: "not applicable"
+    reference_patch: exploratory
+    construction_notes: Rejected strict gate - print-only metrics, no observable functional failure.
+  - id: nanogpt-x04
+    dataset_split: exploratory
+    repository_id: nanogpt
+    environment_id: nanogpt
+    kind: historical
+    budget_profile: small
+    difficulty: medium
+    issue_category: model_training
+    repository_url: https://github.com/karpathy/nanoGPT
+    revision: 9755682b981a45507f6eb9b11eadef8cb83cebd5
+    license: MIT
+    issue: warmup learning rate is zero at iteration 0.
+    source_url: https://github.com/karpathy/nanoGPT/commit/dc81cb368ce3e5761f298726fb3fade1b0ca5901
+    reproduce_command: "not applicable"
+    verify_command: "not applicable"
+    reference_patch: exploratory
+    construction_notes: Rejected strict gate - partial reproduction (inside train.py setup).
+  - id: nanogpt-x05
+    dataset_split: exploratory
+    repository_id: nanogpt
+    environment_id: nanogpt
+    kind: historical
+    budget_profile: small
+    difficulty: small
+    issue_category: model_training
+    repository_url: https://github.com/karpathy/nanoGPT
+    revision: 7c8288552b3673574e0649e031963b8e7e8d4981
+    license: MIT
+    issue: weight-tying init order could corrupt the final-layer initialization.
+    source_url: https://github.com/karpathy/nanoGPT/commit/43b37fd56817e0783c6904f98ae468bb0fbe7aa0
+    reproduce_command: "not applicable"
+    verify_command: "not applicable"
+    reference_patch: exploratory
+    construction_notes: Rejected strict gate - subtle init-order effect, not deterministically reproducible.
+  - id: nanochat-x01
+    dataset_split: exploratory
+    repository_id: nanochat
+    environment_id: nanochat
+    kind: historical
+    budget_profile: small
+    difficulty: small
+    issue_category: data_config
+    repository_url: https://github.com/karpathy/nanochat
+    revision: 5e43f1eb81c632bd7588c76dddab49bd8ea8c268
+    license: MIT
+    issue: token_bytes calculation corrupted non-UTF-8 tokens by round-tripping through str.
+    source_url: https://github.com/karpathy/nanochat/commit/2ce972a3696b92b0ed1c74ed2af7b6c465b50b0d
+    reproduce_command: "not applicable"
+    verify_command: "not applicable"
+    reference_patch: exploratory
+    construction_notes: Rejected strict gate - needs external data (a trained tokenizer).
+  - id: nanochat-x02
+    dataset_split: exploratory
+    repository_id: nanochat
+    environment_id: nanochat
+    kind: historical
+    budget_profile: small
+    difficulty: small
+    issue_category: performance
+    repository_url: https://github.com/karpathy/nanochat
+    revision: e02b33959d10abae597fd1cf7c4ba0f11f50ae31
+    license: MIT
+    issue: inference KV cache hardcoded cuda->bf16, breaking bf16 inference.
+    source_url: https://github.com/karpathy/nanochat/commit/ca366eb
+    reproduce_command: "not applicable"
+    verify_command: "not applicable"
+    reference_patch: exploratory
+    construction_notes: Rejected strict gate - device-specific (bf16 on CUDA/MPS), not CPU-reproducible.
+  - id: nanochat-x03
+    dataset_split: exploratory
+    repository_id: nanochat
+    environment_id: nanochat
+    kind: historical
+    budget_profile: small
+    difficulty: small
+    issue_category: numerical
+    repository_url: https://github.com/karpathy/nanochat
+    revision: 4a87a0d19f30799b6c700285822dcca850adf6a4
+    license: MIT
+    issue: logits softcapping tanh computed in bf16 instead of fp32.
+    source_url: https://github.com/karpathy/nanochat/commit/16788eed3cc3a79a94fa5bb852db722f79852cb7
+    reproduce_command: "not applicable"
+    verify_command: "not applicable"
+    reference_patch: exploratory
+    construction_notes: Rejected strict gate - dtype-specific (bf16 precision), not CPU-reproducible.
+  - id: mingpt-x01
+    dataset_split: exploratory
+    repository_id: mingpt
+    environment_id: mingpt
+    kind: historical
+    budget_profile: small
+    difficulty: small
+    issue_category: data_config
+    repository_url: https://github.com/karpathy/minGPT
+    revision: 339f4e7ad39558bfd7e99d916b9fdd6c6827f807
+    license: MIT
+    issue: CharDataset.__len__ off-by-one error.
+    source_url: https://github.com/karpathy/minGPT/commit/a7b13e02ffef5a6569b6ea7cac1b0566665d9e75
+    reproduce_command: "not applicable"
+    verify_command: "not applicable"
+    reference_patch: exploratory
+    construction_notes: Rejected strict gate - partial reproduction (bug lives in a notebook).
+  - id: mingpt-x02
+    dataset_split: exploratory
+    repository_id: mingpt
+    environment_id: mingpt
+    kind: historical
+    budget_profile: small
+    difficulty: small
+    issue_category: refactor
+    repository_url: https://github.com/karpathy/minGPT
+    revision: 28bcbd0ad907527c59b9fa595b15f1f5fcc6b1d5
+    license: MIT
+    issue: parameter counting incorrectly included positional embeddings.
+    source_url: https://github.com/karpathy/minGPT/commit/4a56b20f80018f1cac1154b3a1b987666c931174
+    reproduce_command: "not applicable"
+    verify_command: "not applicable"
+    reference_patch: exploratory
+    construction_notes: Rejected strict gate - print-only change, no observable functional failure.
