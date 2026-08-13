@@ -304,23 +304,13 @@ class RunService:
                 "completed" if diff_text.strip() else "empty",
                 "git diff --binary HEAD",
             )
-            if (
-                total_usage.duration_ms >= budget.max_seconds * 1_000
-                and self.reviewer.review_model is not None
-            ):
-                return finish(
-                    RunStatus.TIMED_OUT,
-                    "time_budget_exhausted",
-                    functional_success=False,
-                    review_status="skipped",
-                    review_reasons=["time_budget_exhausted"],
-                )
             review = self.reviewer.evaluate(
                 issue=case.issue,
                 reproduction_exit_code=reproduction.returncode,
                 verification_exit_code=verification.returncode,
                 diff_text=diff_text,
                 budget_exhausted=False,
+                timeout_seconds=_advisory_timeout(total_usage, budget),
             )
             review_delta = review.usage
             append(
@@ -443,3 +433,20 @@ def _status_for_budget_reason(reason: str) -> RunStatus:
 def _remaining_seconds(usage: Usage, budget: Budget) -> int:
     remaining_ms = budget.max_seconds * 1_000 - usage.duration_ms
     return max(1, (remaining_ms + 999) // 1_000)
+
+
+def _no_budget_headroom(usage: Usage, budget: Budget) -> bool:
+    """Whether no budget dimension can absorb one advisory reviewer call."""
+    return (
+        usage.duration_ms >= budget.max_seconds * 1_000
+        or usage.input_tokens >= budget.max_input_tokens
+        or usage.output_tokens >= budget.max_output_tokens
+        or usage.cost_usd >= budget.max_cost_usd
+    )
+
+
+def _advisory_timeout(usage: Usage, budget: Budget) -> int | None:
+    """Return the remaining seconds for an advisory call, or None when none remain."""
+    if _no_budget_headroom(usage, budget):
+        return None
+    return _remaining_seconds(usage, budget)

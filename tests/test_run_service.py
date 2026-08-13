@@ -17,7 +17,7 @@ from issueflow.models import BenchmarkCase, Budget, RunStatus, TraceStep, Usage
 from issueflow.reviewer import Reviewer
 from issueflow.run_service import GitWorkspacePreparer, RunService
 from issueflow.sandbox import SandboxResult
-from issueflow.structured_model import StructuredCompletion
+from issueflow.structured_model import ModelProtocolError, StructuredCompletion
 from issueflow.trace_store import TraceStore
 
 
@@ -155,7 +155,7 @@ class BudgetExhaustedAgent:
 
 
 class NeedsChangesModel:
-    def review(self, issue: str, diff_text: str):
+    def review(self, issue: str, diff_text: str, *, timeout_seconds: int):
         class Payload(BaseModel):
             status: str
             reasons: list[str]
@@ -535,3 +535,77 @@ def test_verification_timeout_is_persisted_as_timed_out(tmp_path):
     exported = store.export_json(result.id)
     assert exported["steps"][-1]["step_type"] == "verification"
     assert "partial verification output" in exported["steps"][-1]["output_summary"]
+
+
+def test_reviewer_is_skipped_when_time_budget_has_no_headroom(tmp_path):
+    case = make_case()
+    store = TraceStore(tmp_path / "issueflow.sqlite3")
+
+    class ExactDurationSandbox(SequenceSandbox):
+        def run(self, workspace, command, timeout_seconds):
+            result = super().run(workspace, command, timeout_seconds)
+            return result.__class__(
+                returncode=result.returncode,
+                output=result.output,
+                timed_out=result.timed_out,
+                duration_ms=500,
+            )
+
+    class ForbiddenReviewModel:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def review(self, issue, diff_text, *, timeout_seconds):
+            self.calls += 1
+            raise AssertionError("reviewer must be skipped without budget headroom")
+
+    model = ForbiddenReviewModel()
+    service = RunService(
+        catalog={case.id: case},
+        store=store,
+        workspace_preparer=LocalWorkspacePreparer(tmp_path / "workspaces"),
+        sandbox=ExactDurationSandbox([1, 0]),
+        architecture_factory=lambda _kind, selected_case, workspace: SingleArchitecture(
+            RepairingAgent()
+        ),
+        reviewer=Reviewer(model),
+    )
+
+    result = service.start(case.id, make_budget().model_copy(update={"max_seconds": 1}))
+
+    assert result.status is RunStatus.SUCCEEDED
+    assert result.functional_success is True
+    assert result.review_status == "skipped"
+    assert result.review_reasons == ["reviewer_skipped_no_budget"]
+    assert model.calls == 0
+
+
+def test_reviewer_timeout_is_normalized_to_time_budget_exhausted(tmp_path):
+    case = make_case()
+    store = TraceStore(tmp_path / "issueflow.sqlite3")
+
+    class ReviewTimeoutModel:
+        def review(self, issue, diff_text, *, timeout_seconds):
+            raise ModelProtocolError(
+                "reviewer_request_failed",
+                Usage(model_calls=1, duration_ms=timeout_seconds * 1_000),
+            )
+
+    service = RunService(
+        catalog={case.id: case},
+        store=store,
+        workspace_preparer=LocalWorkspacePreparer(tmp_path / "workspaces"),
+        sandbox=SequenceSandbox([1, 0]),
+        architecture_factory=lambda _kind, selected_case, workspace: SingleArchitecture(
+            RepairingAgent()
+        ),
+        reviewer=Reviewer(ReviewTimeoutModel()),
+    )
+
+    result = service.start(case.id, make_budget().model_copy(update={"max_seconds": 1}))
+
+    assert result.status is RunStatus.TIMED_OUT
+    assert result.stop_reason == "time_budget_exhausted"
+    assert result.functional_success is False
+    assert result.review_status == "failed"
+    assert result.review_reasons == ["reviewer_request_failed"]

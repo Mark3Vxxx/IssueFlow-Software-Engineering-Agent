@@ -1,5 +1,7 @@
 """Deterministic success checks and advisory model review."""
 
+from collections.abc import Callable
+from time import monotonic
 from typing import Literal, Protocol
 
 import httpx
@@ -43,6 +45,8 @@ class ReviewModel(Protocol):
         self,
         issue: str,
         diff_text: str,
+        *,
+        timeout_seconds: int,
     ) -> StructuredCompletion[AdvisoryReview]: ...
 
 
@@ -55,18 +59,23 @@ class DeepSeekReviewClient:
         model: str,
         base_url: str,
         http_client: httpx.Client | None = None,
+        clock: Callable[[], float] = monotonic,
     ) -> None:
         self.api_key = api_key
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.http_client = http_client or httpx.Client(timeout=60)
+        self.clock = clock
 
     def review(
         self,
         issue: str,
         diff_text: str,
+        *,
+        timeout_seconds: int,
     ) -> StructuredCompletion[AdvisoryReview]:
         """Return a parsed advisory result and chargeable request usage."""
+        started_at = self.clock()
         try:
             response = self.http_client.post(
                 f"{self.base_url}/chat/completions",
@@ -93,16 +102,21 @@ class DeepSeekReviewClient:
                     "stream": False,
                     "max_tokens": 256,
                 },
+                timeout=timeout_seconds,
             )
             response.raise_for_status()
         except httpx.HTTPError:
-            raise ModelProtocolError("reviewer_request_failed", Usage(model_calls=1)) from None
+            raise ModelProtocolError(
+                "reviewer_request_failed",
+                Usage(model_calls=1, duration_ms=_elapsed_ms(self.clock(), started_at)),
+            ) from None
 
         try:
             payload = response.json()
         except (TypeError, ValueError):
             payload = {}
         usage = self._usage(payload if isinstance(payload, dict) else {})
+        usage = usage.model_copy(update={"duration_ms": _elapsed_ms(self.clock(), started_at)})
         try:
             content = payload["choices"][0]["message"]["content"]
             value = AdvisoryReview.model_validate_json(content)
@@ -155,6 +169,8 @@ class Reviewer:
         verification_exit_code: int,
         diff_text: str,
         budget_exhausted: bool,
+        *,
+        timeout_seconds: int | None = None,
     ) -> ReviewResult:
         """Return deterministic success plus optional model review."""
         deterministic = self.evaluate_deterministic(
@@ -169,10 +185,16 @@ class Reviewer:
                 status="skipped",
                 reasons=deterministic.reasons,
             )
+        if timeout_seconds is None or timeout_seconds <= 0:
+            return ReviewResult(
+                functional_success=True,
+                status="skipped",
+                reasons=["reviewer_skipped_no_budget"],
+            )
 
         usage = Usage(model_calls=1)
         try:
-            completion = self.review_model.review(issue, diff_text)
+            completion = self.review_model.review(issue, diff_text, timeout_seconds=timeout_seconds)
             usage = completion.usage
             raw_review = completion.value
             if isinstance(raw_review, BaseModel):
@@ -215,3 +237,7 @@ def _token_count(value: object) -> int:
         return max(0, int(value or 0))
     except (TypeError, ValueError):
         return 0
+
+
+def _elapsed_ms(now: float, started_at: float) -> int:
+    return max(0, int((now - started_at) * 1_000))
