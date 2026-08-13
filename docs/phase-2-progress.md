@@ -5,14 +5,15 @@ Update this table only from verified milestone gates.
 | Milestone | Tasks done | Verification | Paid spend | Status |
 | --- | ---: | --- | ---: | --- |
 | 2A Architectures | 8/8 | Tests PASS; reviewer-budget fix reviewed clean | CNY 0 | Complete |
-| 2B Benchmark | 4/8 | Framework PASS; 0/20 strict × 3 | CNY 0 | In progress |
+| 2B Benchmark | 6/8 | 6/20 strict × 3 (shortfall documented) | CNY 0 | In progress |
 | 2C Experiments | 0/10 | 0/160 trials | CNY 0 | Not started |
 | 2D Results | 0/6 | Not run | CNY 0 | Not started |
 
 ## 当前快照（2026-08-13）
 
 - 工作分支：`main`
-- 2A 已 `Complete`；2B 的 4 个框架代码任务（catalog 拆分、环境 registry、隐藏验证隔离、三次重放资格验证器）已完成并提交，剩余为数据构建阶段（仓库筛选 + 严格/探索样本）。
+- 2A 已 `Complete`；2B 的 4 个框架代码任务（catalog 拆分、环境 registry、隐藏验证隔离、三次重放资格验证器）已完成并提交。
+- 严格样本：**实际构建 6 个**（目标 20），短少原因已记录在 `docs/phase-2-repository-qualification.md`——候选仓库历史修复不足，未降门槛凑数。
 - 当前累计付费 API 支出：`CNY 0`。所有现有架构与验证均使用确定性脚本模型。
 
 ## 已验证证据
