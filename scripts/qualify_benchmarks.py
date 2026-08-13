@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 PROJECT_ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
@@ -36,35 +37,36 @@ def main() -> int:
 
     sandbox_factory = SandboxFactory(environments)
     hidden_verifier = HiddenVerifier(PROJECT_ROOT / "benchmarks" / "hidden")
-    workspace_preparer = GitWorkspacePreparer(
-        PROJECT_ROOT / ".issueflow" / "qualify-workspaces",
-        PROJECT_ROOT / "benchmarks",
-    )
     patch_root = PROJECT_ROOT / "benchmarks" / "cases"
 
     arguments.qualification_root.mkdir(parents=True, exist_ok=True)
     failures = 0
-    for case in catalog.values():
-        try:
-            sandbox = sandbox_factory.for_case(case)
-        except KeyError as error:
-            print(f"{case.id} REJECTED {error}", file=sys.stderr)
-            failures += 1
-            continue
-        result = qualify_case(
-            case,
-            workspace_preparer=workspace_preparer,
-            sandbox=sandbox,
-            hidden_verifier=hidden_verifier,
-            patch_root=patch_root,
-            replays=arguments.replays,
+    with TemporaryDirectory(prefix="issueflow-qualify-") as raw_workspace_root:
+        workspace_preparer = GitWorkspacePreparer(
+            Path(raw_workspace_root),
+            PROJECT_ROOT / "benchmarks",
         )
-        _write_result(arguments.qualification_root, result)
-        if result.accepted_split is None:
-            failures += 1
-            print(f"{case.id} REJECTED {result.reasons}")
-        else:
-            print(f"{case.id} ACCEPTED {result.reasons}")
+        for case in catalog.values():
+            try:
+                sandbox = sandbox_factory.for_case(case)
+            except KeyError as error:
+                print(f"{case.id} REJECTED {error}", file=sys.stderr)
+                failures += 1
+                continue
+            result = qualify_case(
+                case,
+                workspace_preparer=workspace_preparer,
+                sandbox=sandbox,
+                hidden_verifier=hidden_verifier,
+                patch_root=patch_root,
+                replays=arguments.replays,
+            )
+            _write_result(arguments.qualification_root, result)
+            if result.accepted_split is None:
+                failures += 1
+                print(f"{case.id} REJECTED {result.reasons}")
+            else:
+                print(f"{case.id} ACCEPTED {result.reasons}")
 
     return int(failures > 0)
 
