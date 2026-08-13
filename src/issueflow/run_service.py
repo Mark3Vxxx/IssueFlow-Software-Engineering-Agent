@@ -12,7 +12,16 @@ from issueflow.architectures.base import (
     ArchitectureRunner,
     RunContext,
 )
-from issueflow.models import BenchmarkCase, Budget, RunRecord, RunStatus, TraceStep, Usage
+from issueflow.hidden_validation import HIDDEN_MOUNT_LABEL, HiddenVerifier
+from issueflow.models import (
+    BenchmarkCase,
+    Budget,
+    DatasetSplit,
+    RunRecord,
+    RunStatus,
+    TraceStep,
+    Usage,
+)
 from issueflow.reviewer import Reviewer
 from issueflow.sandbox import SandboxResult
 from issueflow.trace_store import TraceStore
@@ -52,11 +61,14 @@ class GitWorkspacePreparer:
         """Create a clean, isolated Git workspace at the benchmark's faulty state."""
         self.workspace_root.mkdir(parents=True, exist_ok=True)
         workspace = self.workspace_root / run_id
+        workspace.mkdir(parents=True, exist_ok=True)
+        self._run_git(["git", "init", "--quiet"], workspace)
+        self._run_git(["git", "remote", "add", "origin", case.repository_url], workspace)
         self._run_git(
-            ["git", "clone", "--quiet", case.repository_url, str(workspace)],
-            self.workspace_root,
+            ["git", "fetch", "--quiet", "--depth", "1", "origin", case.revision],
+            workspace,
         )
-        self._run_git(["git", "checkout", "--quiet", case.revision], workspace)
+        self._run_git(["git", "checkout", "--quiet", "FETCH_HEAD"], workspace)
         if case.fault_patch:
             patch_path = (self.catalog_root / case.fault_patch).resolve()
             try:
@@ -105,6 +117,7 @@ class RunService:
         sandbox_factory: SandboxFactory,
         architecture_factory: ArchitectureFactory,
         reviewer: Reviewer,
+        hidden_verifier: HiddenVerifier | None = None,
     ) -> None:
         self.catalog = catalog
         self.store = store
@@ -112,6 +125,7 @@ class RunService:
         self.sandbox_factory = sandbox_factory
         self.architecture_factory = architecture_factory
         self.reviewer = reviewer
+        self.hidden_verifier = hidden_verifier
 
     def start(
         self,
@@ -308,6 +322,59 @@ class RunService:
                     review_status="skipped",
                     review_reasons=[global_reason],
                 )
+
+            if case.dataset_split is DatasetSplit.STRICT:
+                if self.hidden_verifier is None:
+                    return finish(
+                        RunStatus.FAILED,
+                        "hidden_verifier_missing",
+                        functional_success=False,
+                        review_status="skipped",
+                        review_reasons=["hidden_verifier_missing"],
+                    )
+                hidden_result = self.hidden_verifier.verify(
+                    case,
+                    workspace,
+                    sandbox,
+                    _remaining_seconds(total_usage, budget),
+                )
+                total_usage = _add_usage(
+                    total_usage,
+                    Usage(duration_ms=hidden_result.duration_ms),
+                )
+                append(
+                    "hidden_verification",
+                    self._command_output(hidden_result),
+                    "passed" if hidden_result.returncode == 0 else "failed",
+                    HIDDEN_MOUNT_LABEL,
+                    hidden_result.duration_ms,
+                )
+                if hidden_result.timed_out:
+                    return finish(
+                        RunStatus.TIMED_OUT,
+                        "hidden_verification_timed_out",
+                        functional_success=False,
+                        review_status="skipped",
+                        review_reasons=["hidden_verification_timed_out"],
+                    )
+                if hidden_result.returncode != 0:
+                    return finish(
+                        RunStatus.FAILED,
+                        "hidden_test_failure",
+                        functional_success=False,
+                        review_status="skipped",
+                        review_reasons=["hidden_test_failure"],
+                    )
+                global_reason = _budget_overrun_reason(total_usage, budget)
+                if global_reason is not None:
+                    return finish(
+                        _status_for_budget_reason(global_reason),
+                        global_reason,
+                        functional_success=False,
+                        review_status="skipped",
+                        review_reasons=[global_reason],
+                    )
+
             diff_text = self._workspace_diff(workspace)
             append(
                 "diff",

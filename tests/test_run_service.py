@@ -63,6 +63,7 @@ def test_run_service_has_one_architecture_constructor_contract():
         "sandbox_factory",
         "architecture_factory",
         "reviewer",
+        "hidden_verifier",
     ]
 
 
