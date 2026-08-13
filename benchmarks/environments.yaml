@@ -14,13 +14,13 @@ environments:
     dockerfile: docker/Dockerfile.nanogpt
     python_version: "3.12"
     lock_digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
-  - id: build-nanogpt
-    image: issueflow-build-nanogpt:phase2
-    dockerfile: docker/Dockerfile.build-nanogpt
+  - id: nanochat
+    image: issueflow-nanochat:phase2
+    dockerfile: docker/Dockerfile.nanochat
     python_version: "3.12"
     lock_digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
-  - id: tinygrad
-    image: issueflow-tinygrad:phase2
-    dockerfile: docker/Dockerfile.tinygrad
+  - id: makemore
+    image: issueflow-makemore:phase2
+    dockerfile: docker/Dockerfile.makemore
     python_version: "3.12"
     lock_digest: sha256:0000000000000000000000000000000000000000000000000000000000000000

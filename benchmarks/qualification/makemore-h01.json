@@ -1,0 +1,28 @@
+{
+  "case_id": "makemore-h01",
+  "accepted_split": "strict",
+  "reasons": [],
+  "replays": [
+    {
+      "replay": 1,
+      "reproduction": "FAIL_AS_EXPECTED",
+      "public_verification": "PASS",
+      "hidden_verification": "PASS"
+    },
+    {
+      "replay": 2,
+      "reproduction": "FAIL_AS_EXPECTED",
+      "public_verification": "PASS",
+      "hidden_verification": "PASS"
+    },
+    {
+      "replay": 3,
+      "reproduction": "FAIL_AS_EXPECTED",
+      "public_verification": "PASS",
+      "hidden_verification": "PASS"
+    }
+  ],
+  "environment_id": "makemore",
+  "revision": "2f5e8d746e87b3c8424474e35b702092ed7e9579",
+  "reference_patch_sha256": "b78b1c727dc62817a1f391900ec126f469c46be728af9b83b30b303113044911"
+}

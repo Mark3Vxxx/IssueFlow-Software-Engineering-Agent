@@ -80,3 +80,23 @@ cases:
     hidden_test_path: nanogpt-h03/test_hidden.py
     hidden_verify_command: python -m pytest /issueflow-hidden/test_hidden.py
     fixed_revision: 91d02510ce8c832923d0a6408d983e2d55f0291e
+  - id: makemore-h01
+    dataset_split: strict
+    repository_id: makemore
+    environment_id: makemore
+    kind: historical
+    budget_profile: small
+    difficulty: small
+    issue_category: model_training
+    repository_url: https://github.com/karpathy/makemore
+    revision: 2f5e8d746e87b3c8424474e35b702092ed7e9579
+    license: MIT
+    issue: The RNN forward loop never updates hprev, so every timestep uses the initial hidden state instead of the previous cell output, breaking the recurrence.
+    source_url: https://github.com/karpathy/makemore/commit/bf386250141f18f61321bc4b9a56c7b67c0b1668
+    reproduce_command: python -c "import torch; from makemore import RNN, ModelConfig; c = ModelConfig(); c.vocab_size = 10; c.block_size = 4; c.n_embd = 8; c.n_embd2 = 8; m = RNN(c, 'rnn'); o1, _ = m(torch.tensor([[1, 2]])); o2, _ = m(torch.tensor([[3, 2]])); assert not torch.allclose(o1[:, -1], o2[:, -1])"
+    verify_command: python -c "import torch; from makemore import RNN, ModelConfig; c = ModelConfig(); c.vocab_size = 10; c.block_size = 4; c.n_embd = 8; c.n_embd2 = 8; m = RNN(c, 'rnn'); o1, _ = m(torch.tensor([[1, 2]])); o2, _ = m(torch.tensor([[3, 2]])); assert not torch.allclose(o1[:, -1], o2[:, -1])"
+    reference_patch: makemore-h01/reference.patch
+    construction_notes: Historical repair from commit bf38625; the RNN hidden state never propagated.
+    hidden_test_path: makemore-h01/test_hidden.py
+    hidden_verify_command: python -m pytest /issueflow-hidden/test_hidden.py
+    fixed_revision: bf386250141f18f61321bc4b9a56c7b67c0b1668
