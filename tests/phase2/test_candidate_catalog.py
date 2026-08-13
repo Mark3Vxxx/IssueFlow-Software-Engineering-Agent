@@ -13,8 +13,6 @@ def test_candidates_have_exact_owner_name_and_https_url():
     assert [c.repository for c in candidates] == [
         "karpathy/minGPT",
         "karpathy/nanoGPT",
-        "karpathy/build-nanogpt",
-        "tinygrad/tinygrad",
         "karpathy/nanochat",
         "karpathy/makemore",
     ]
@@ -28,10 +26,9 @@ def test_candidates_have_exact_owner_name_and_https_url():
 
 def test_primary_candidates_total_target_quota_is_twenty():
     candidates = load_candidates(CANDIDATES_PATH)
-    primary = [c for c in candidates if c.target_quota > 0]
 
-    assert [c.priority for c in primary] == [1, 2, 3, 4]
-    assert sum(c.target_quota for c in primary) == 20
+    assert [c.priority for c in candidates] == [1, 2, 3, 4]
+    assert sum(c.target_quota for c in candidates) == 20
 
 
 def test_priorities_are_strictly_ordered():

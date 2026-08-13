@@ -1,40 +1,25 @@
 # Phase 2 仓库资格筛选
 
-> 状态：候选已编码，等待用户审批后冻结 3–4 个仓库与配额。
+> 状态：已冻结（用户 2026-08-13 批准）
 
-## 候选清单（固定顺序）
+## 选定仓库（4 个，配额合计 20）
 
-| 优先级 | 仓库 | 许可证 | 目标配额 |
-| ---: | --- | --- | ---: |
-| 1 | `karpathy/minGPT` | MIT | 5 |
-| 2 | `karpathy/nanoGPT` | MIT | 5 |
-| 3 | `karpathy/build-nanogpt` | MIT | 4 |
-| 4 | `tinygrad/tinygrad` | MIT | 6 |
-| 5 | `karpathy/nanochat`（fallback） | MIT | — |
-| 6 | `karpathy/makemore`（fallback） | MIT | — |
+| 优先级 | 仓库 | 许可证 | Python 非空行 | 配额 |
+| ---: | --- | --- | ---: | ---: |
+| 1 | `karpathy/minGPT` | MIT | 1,057 | 5 |
+| 2 | `karpathy/nanoGPT` | MIT | 1,085 | 5 |
+| 3 | `karpathy/nanochat` | MIT | 6,731 | 6 |
+| 4 | `karpathy/makemore` | MIT | 603 | 4 |
 
-主候选目标配额合计 20。
+## 被拒候选
 
-## 筛选门（每个候选都必须通过）
+| 仓库 | 拒绝原因 |
+| --- | --- |
+| `karpathy/build-nanogpt` | 无 LICENSE 文件，许可证门失败 |
+| `tinygrad/tinygrad` | HEAD 核心树 347,643 行，超 10,000 行上限；需历史 revision，用户选择换掉 |
 
-- 许可证是 MIT / Apache-2.0 / BSD-3-Clause，且与上游许可证文件一致。
-- 一个 CPU-only、版本固定的 Docker 环境能构建。
-- 至少 3 个候选历史修复有可复现的失败。
-- Agent 可见 checkout 能排除 post-fault 历史。
-- 每次复现 120 秒内完成。
+## 后续（构建严格样本前必须完成）
 
-## 检查方法
-
-运行只读检查（clone 到 `.issueflow/candidate-cache`）：
-
-```bash
-.venv/bin/python scripts/inspect_repository_candidates.py
-```
-
-输出每个仓库的许可证文件、Python 非空行数、`.py` 提交数、测试入口。
-
-## 待办
-
-- [ ] 运行检查脚本，记录许可证 / 行数 / 环境 smoke / 候选修复数。
-- [ ] 用户审批 3–4 个仓库与配额。
-- [ ] 冻结本文件的选定仓库与精确配额。
+- [ ] 每个仓库找到 ≥3 个可复现的历史 bug（issue/PR/修复提交）。
+- [ ] 构建各仓库的 CPU Docker 环境并 smoke 通过。
+- [ ] 冻结严格案例清单（20 个）。
