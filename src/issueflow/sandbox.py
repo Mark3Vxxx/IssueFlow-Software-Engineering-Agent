@@ -19,7 +19,12 @@ class SandboxResult:
     duration_ms: int
 
 
-def build_docker_command(workspace: Path, command: str, timeout_seconds: int) -> list[str]:
+def build_docker_command(
+    workspace: Path,
+    command: str,
+    timeout_seconds: int,
+    image_name: str = IMAGE_NAME,
+) -> list[str]:
     """Build the fixed isolation boundary for a single workspace command."""
     if timeout_seconds <= 0:
         raise ValueError("timeout_seconds must be positive")
@@ -42,7 +47,7 @@ def build_docker_command(workspace: Path, command: str, timeout_seconds: int) ->
         f"{workspace.resolve()}:/workspace:rw",
         "--workdir",
         "/workspace",
-        IMAGE_NAME,
+        image_name,
         "sh",
         "-lc",
         command,
@@ -52,9 +57,12 @@ def build_docker_command(workspace: Path, command: str, timeout_seconds: int) ->
 class DockerSandbox:
     """Run registered commands inside the fixed Docker isolation boundary."""
 
+    def __init__(self, image_name: str = IMAGE_NAME) -> None:
+        self.image_name = image_name
+
     def run(self, workspace: Path, command: str, timeout_seconds: int) -> SandboxResult:
         """Execute a command with a host-side deadline and bounded captured output."""
-        docker_command = build_docker_command(workspace, command, timeout_seconds)
+        docker_command = build_docker_command(workspace, command, timeout_seconds, self.image_name)
         started_at = monotonic()
         try:
             completed = subprocess.run(

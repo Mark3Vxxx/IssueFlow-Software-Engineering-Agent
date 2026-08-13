@@ -124,6 +124,14 @@ def _budget() -> Budget:
     )
 
 
+class StaticSandboxFactory:
+    def __init__(self, sandbox) -> None:
+        self.sandbox = sandbox
+
+    def for_case(self, case):
+        return self.sandbox
+
+
 def test_full_pipeline_replays_in_docker_and_exports_evidence(tmp_path):
     case, catalog_root = _make_local_benchmark(tmp_path)
     store = TraceStore(tmp_path / "issueflow.sqlite3")
@@ -132,8 +140,8 @@ def test_full_pipeline_replays_in_docker_and_exports_evidence(tmp_path):
         catalog={case.id: case},
         store=store,
         workspace_preparer=GitWorkspacePreparer(tmp_path / "workspaces", catalog_root),
-        sandbox=sandbox,
-        architecture_factory=lambda _kind, selected_case, workspace: SingleArchitecture(
+        sandbox_factory=StaticSandboxFactory(sandbox),
+        architecture_factory=lambda _kind, selected_case, workspace, sandbox: SingleArchitecture(
             SingleAgent(
                 model=ScriptedRepairModel(selected_case.verify_command),
                 tools=ToolExecutor(workspace, selected_case, sandbox),

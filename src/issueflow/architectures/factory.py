@@ -25,20 +25,19 @@ class ArchitectureFactory:
         *,
         single_model_factory: SingleModelFactory,
         structured_model: StructuredModel,
-        sandbox: SandboxRunner,
     ) -> None:
         self.single_model_factory = single_model_factory
         self.structured_model = structured_model
-        self.sandbox = sandbox
 
     def create(
         self,
         kind: ArchitectureKind,
         case: BenchmarkCase,
         workspace: Path,
+        sandbox: SandboxRunner,
     ) -> ArchitectureRunner:
         """Create exactly the requested runner with a case-scoped tool executor."""
-        tools = ToolExecutor(workspace, case, self.sandbox)
+        tools = ToolExecutor(workspace, case, sandbox)
         if kind is ArchitectureKind.DIRECT:
             return DirectArchitecture(self.structured_model, tools)
         if kind is ArchitectureKind.SINGLE:

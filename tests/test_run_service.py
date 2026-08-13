@@ -60,7 +60,7 @@ def test_run_service_has_one_architecture_constructor_contract():
         "catalog",
         "store",
         "workspace_preparer",
-        "sandbox",
+        "sandbox_factory",
         "architecture_factory",
         "reviewer",
     ]
@@ -105,6 +105,14 @@ class SequenceSandbox:
             timed_out=False,
             duration_ms=5,
         )
+
+
+class StaticSandboxFactory:
+    def __init__(self, sandbox) -> None:
+        self.sandbox = sandbox
+
+    def for_case(self, case: BenchmarkCase):
+        return self.sandbox
 
 
 class VerificationTimeoutSandbox:
@@ -187,8 +195,10 @@ def test_successful_run_persists_full_evidence_and_advisory_review(tmp_path):
         catalog={case.id: case},
         store=store,
         workspace_preparer=LocalWorkspacePreparer(tmp_path / "workspaces"),
-        sandbox=sandbox,
-        architecture_factory=lambda _kind, case, workspace: SingleArchitecture(RepairingAgent()),
+        sandbox_factory=StaticSandboxFactory(sandbox),
+        architecture_factory=lambda _kind, case, workspace, sandbox: SingleArchitecture(
+            RepairingAgent()
+        ),
         reviewer=Reviewer(NeedsChangesModel()),
     )
 
@@ -232,8 +242,8 @@ def test_invalid_parsed_review_persists_usage_without_overriding_success(tmp_pat
         catalog={case.id: case},
         store=store,
         workspace_preparer=LocalWorkspacePreparer(tmp_path / "workspaces"),
-        sandbox=SequenceSandbox([1, 0]),
-        architecture_factory=lambda _kind, selected_case, workspace: SingleArchitecture(
+        sandbox_factory=StaticSandboxFactory(SequenceSandbox([1, 0])),
+        architecture_factory=lambda _kind, selected_case, workspace, sandbox: SingleArchitecture(
             RepairingAgent()
         ),
         reviewer=Reviewer(InvalidParsedReviewModel(usage)),
@@ -274,8 +284,8 @@ def test_run_usage_is_persisted_once_and_includes_outer_reviewer(tmp_path):
         catalog={case.id: case},
         store=store,
         workspace_preparer=LocalWorkspacePreparer(tmp_path / "workspaces"),
-        sandbox=SequenceSandbox([1, 0]),
-        architecture_factory=lambda _kind, selected_case, workspace: SingleArchitecture(
+        sandbox_factory=StaticSandboxFactory(SequenceSandbox([1, 0])),
+        architecture_factory=lambda _kind, selected_case, workspace, sandbox: SingleArchitecture(
             RepairingAgent()
         ),
         reviewer=Reviewer(NeedsChangesModel()),
@@ -323,8 +333,8 @@ def test_exact_global_time_limit_is_allowed_when_no_advisory_call_remains(tmp_pa
         catalog={case.id: case},
         store=store,
         workspace_preparer=LocalWorkspacePreparer(tmp_path / "workspaces"),
-        sandbox=ExactDurationSandbox([1, 0]),
-        architecture_factory=lambda _kind, selected_case, workspace: SingleArchitecture(
+        sandbox_factory=StaticSandboxFactory(ExactDurationSandbox([1, 0])),
+        architecture_factory=lambda _kind, selected_case, workspace, sandbox: SingleArchitecture(
             RepairingAgent()
         ),
         reviewer=Reviewer(),
@@ -373,7 +383,7 @@ def test_default_and_explicit_architectures_are_persisted_with_the_same_budget(t
                 ],
             )
 
-    def architecture_factory(kind, selected_case, workspace):
+    def architecture_factory(kind, selected_case, workspace, sandbox):
         requested.append((kind, selected_case, workspace))
         return RepairArchitecture(kind)
 
@@ -381,7 +391,7 @@ def test_default_and_explicit_architectures_are_persisted_with_the_same_budget(t
         catalog={case.id: case},
         store=store,
         workspace_preparer=LocalWorkspacePreparer(tmp_path / "workspaces"),
-        sandbox=SequenceSandbox([1, 0, 1, 0]),
+        sandbox_factory=StaticSandboxFactory(SequenceSandbox([1, 0, 1, 0])),
         architecture_factory=architecture_factory,
         reviewer=Reviewer(),
     )
@@ -408,8 +418,8 @@ def test_budget_exhaustion_is_terminal_and_persisted(tmp_path):
         catalog={case.id: case},
         store=store,
         workspace_preparer=LocalWorkspacePreparer(tmp_path / "workspaces"),
-        sandbox=SequenceSandbox([1]),
-        architecture_factory=lambda _kind, case, workspace: SingleArchitecture(
+        sandbox_factory=StaticSandboxFactory(SequenceSandbox([1])),
+        architecture_factory=lambda _kind, case, workspace, sandbox: SingleArchitecture(
             BudgetExhaustedAgent()
         ),
         reviewer=Reviewer(),
@@ -432,8 +442,10 @@ def test_unhandled_failure_still_finishes_persisted_run(tmp_path):
         catalog={case.id: case},
         store=store,
         workspace_preparer=BrokenWorkspacePreparer(),
-        sandbox=SequenceSandbox([]),
-        architecture_factory=lambda _kind, case, workspace: SingleArchitecture(RepairingAgent()),
+        sandbox_factory=StaticSandboxFactory(SequenceSandbox([])),
+        architecture_factory=lambda _kind, case, workspace, sandbox: SingleArchitecture(
+            RepairingAgent()
+        ),
         reviewer=Reviewer(),
     )
 
@@ -509,7 +521,7 @@ def test_reproduction_that_unexpectedly_passes_stops_before_agent(tmp_path):
         catalog={case.id: case},
         store=store,
         workspace_preparer=LocalWorkspacePreparer(tmp_path / "workspaces"),
-        sandbox=SequenceSandbox([0]),
+        sandbox_factory=StaticSandboxFactory(SequenceSandbox([0])),
         architecture_factory=ExplodingArchitectureFactory(),
         reviewer=Reviewer(),
     )
@@ -528,8 +540,10 @@ def test_verification_timeout_is_persisted_as_timed_out(tmp_path):
         catalog={case.id: case},
         store=store,
         workspace_preparer=LocalWorkspacePreparer(tmp_path / "workspaces"),
-        sandbox=VerificationTimeoutSandbox(),
-        architecture_factory=lambda _kind, case, workspace: SingleArchitecture(RepairingAgent()),
+        sandbox_factory=StaticSandboxFactory(VerificationTimeoutSandbox()),
+        architecture_factory=lambda _kind, case, workspace, sandbox: SingleArchitecture(
+            RepairingAgent()
+        ),
         reviewer=Reviewer(),
     )
 
@@ -569,8 +583,8 @@ def test_reviewer_is_skipped_when_time_budget_has_no_headroom(tmp_path):
         catalog={case.id: case},
         store=store,
         workspace_preparer=LocalWorkspacePreparer(tmp_path / "workspaces"),
-        sandbox=ExactDurationSandbox([1, 0]),
-        architecture_factory=lambda _kind, selected_case, workspace: SingleArchitecture(
+        sandbox_factory=StaticSandboxFactory(ExactDurationSandbox([1, 0])),
+        architecture_factory=lambda _kind, selected_case, workspace, sandbox: SingleArchitecture(
             RepairingAgent()
         ),
         reviewer=Reviewer(model),
@@ -600,8 +614,8 @@ def test_reviewer_timeout_is_normalized_to_time_budget_exhausted(tmp_path):
         catalog={case.id: case},
         store=store,
         workspace_preparer=LocalWorkspacePreparer(tmp_path / "workspaces"),
-        sandbox=SequenceSandbox([1, 0]),
-        architecture_factory=lambda _kind, selected_case, workspace: SingleArchitecture(
+        sandbox_factory=StaticSandboxFactory(SequenceSandbox([1, 0])),
+        architecture_factory=lambda _kind, selected_case, workspace, sandbox: SingleArchitecture(
             RepairingAgent()
         ),
         reviewer=Reviewer(ReviewTimeoutModel()),

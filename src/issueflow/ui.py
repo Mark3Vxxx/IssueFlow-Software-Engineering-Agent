@@ -16,10 +16,10 @@ from issueflow.architectures.factory import ArchitectureFactory
 from issueflow.benchmark import load_catalog
 from issueflow.budget import budget_for_case
 from issueflow.config import Settings
+from issueflow.environment import SandboxFactory, load_environments
 from issueflow.models import BenchmarkCase, Budget, RunRecord
 from issueflow.reviewer import DeepSeekReviewClient, Reviewer
 from issueflow.run_service import GitWorkspacePreparer, RunService
-from issueflow.sandbox import DockerSandbox
 from issueflow.structured_model import DeepSeekStructuredModel
 from issueflow.trace_store import TraceStore, redact
 
@@ -395,7 +395,9 @@ def build_runtime(
     data_root.mkdir(parents=True, exist_ok=True)
     catalog = load_catalog(project_root / "benchmarks/catalogs/compatibility.yaml")
     store = TraceStore(data_root / "issueflow.sqlite3")
-    sandbox = DockerSandbox()
+    sandbox_factory = SandboxFactory(
+        load_environments(project_root / "benchmarks/environments.yaml")
+    )
     api_key = settings.api_key.get_secret_value()
 
     def single_model_factory(case: BenchmarkCase) -> DeepSeekModelClient:
@@ -416,7 +418,6 @@ def build_runtime(
             base_url=settings.base_url,
             temperature=settings.temperature,
         ),
-        sandbox=sandbox,
     )
 
     service = RunService(
@@ -426,7 +427,7 @@ def build_runtime(
             data_root / "workspaces",
             project_root / "benchmarks",
         ),
-        sandbox=sandbox,
+        sandbox_factory=sandbox_factory,
         architecture_factory=architecture_factory.create,
         reviewer=Reviewer(
             DeepSeekReviewClient(

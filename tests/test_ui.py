@@ -683,7 +683,9 @@ def test_runtime_wires_each_cases_registered_commands_into_its_agent(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
 
-    runner = service.architecture_factory(ArchitectureKind.SINGLE, case, workspace)
+    runner = service.architecture_factory(
+        ArchitectureKind.SINGLE, case, workspace, service.sandbox_factory.for_case(case)
+    )
     agent = runner.agent
 
     assert store.database_path == tmp_path / "data" / "issueflow.sqlite3"

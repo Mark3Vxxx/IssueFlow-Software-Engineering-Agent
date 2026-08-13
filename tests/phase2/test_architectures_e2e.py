@@ -460,6 +460,14 @@ def _make_local_benchmark(tmp_path: Path) -> tuple[BenchmarkCase, Path]:
     return case, catalog_root
 
 
+class StaticSandboxFactory:
+    def __init__(self, sandbox) -> None:
+        self.sandbox = sandbox
+
+    def for_case(self, case):
+        return self.sandbox
+
+
 @pytest.mark.parametrize("architecture", list(ArchitectureKind), ids=lambda item: item.value)
 def test_each_architecture_repairs_through_the_same_real_outer_pipeline(
     tmp_path: Path,
@@ -474,12 +482,11 @@ def test_each_architecture_repairs_through_the_same_real_outer_pipeline(
             selected_case.verify_command
         ),
         structured_model=ScriptedStructuredModel(case.verify_command),
-        sandbox=sandbox,
     )
 
-    def architecture_factory(kind, selected_case, workspace):
+    def architecture_factory(kind, selected_case, workspace, sandbox):
         return RecordingRunner(
-            factory.create(kind, selected_case, workspace),
+            factory.create(kind, selected_case, workspace, sandbox),
             received_budgets,
         )
 
@@ -487,7 +494,7 @@ def test_each_architecture_repairs_through_the_same_real_outer_pipeline(
         catalog={case.id: case},
         store=store,
         workspace_preparer=GitWorkspacePreparer(tmp_path / "workspaces", catalog_root),
-        sandbox=sandbox,
+        sandbox_factory=StaticSandboxFactory(sandbox),
         architecture_factory=architecture_factory,
         reviewer=Reviewer(),
     )
@@ -544,7 +551,6 @@ def test_compatibility_matrix_uses_case_decisions_through_real_git_docker_and_st
             CASE_REPAIRS[selected_case.id], selected_case.verify_command
         ),
         structured_model=structured_model,
-        sandbox=sandbox,
     )
     service = RunService(
         catalog={case.id: case},
@@ -552,9 +558,9 @@ def test_compatibility_matrix_uses_case_decisions_through_real_git_docker_and_st
         workspace_preparer=GitWorkspacePreparer(
             tmp_path / "workspaces", COMPATIBILITY_CATALOG.parent.parent
         ),
-        sandbox=sandbox,
-        architecture_factory=lambda kind, selected_case, workspace: factory.create(
-            kind, selected_case, workspace
+        sandbox_factory=StaticSandboxFactory(sandbox),
+        architecture_factory=lambda kind, selected_case, workspace, sandbox: factory.create(
+            kind, selected_case, workspace, sandbox
         ),
         reviewer=Reviewer(),
     )

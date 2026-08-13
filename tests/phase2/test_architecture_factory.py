@@ -64,10 +64,9 @@ def test_factory_creates_each_exact_architecture_with_case_scoped_tools(case, tm
     factory = ArchitectureFactory(
         single_model_factory=single_model_factory,
         structured_model=StaticStructuredModel(),
-        sandbox=sandbox,
     )
 
-    runners = {kind: factory.create(kind, case, tmp_path) for kind in ArchitectureKind}
+    runners = {kind: factory.create(kind, case, tmp_path, sandbox) for kind in ArchitectureKind}
 
     assert isinstance(runners[ArchitectureKind.DIRECT], DirectArchitecture)
     assert isinstance(runners[ArchitectureKind.SINGLE], SingleArchitecture)

@@ -30,7 +30,15 @@ class SandboxRunner(Protocol):
     def run(self, workspace: Path, command: str, timeout_seconds: int) -> SandboxResult: ...
 
 
-ArchitectureFactory = Callable[[ArchitectureKind, BenchmarkCase, Path], ArchitectureRunner]
+class SandboxFactory(Protocol):
+    """Resolve one case's environment into a case-scoped sandbox."""
+
+    def for_case(self, case: BenchmarkCase) -> SandboxRunner: ...
+
+
+ArchitectureFactory = Callable[
+    [ArchitectureKind, BenchmarkCase, Path, SandboxRunner], ArchitectureRunner
+]
 
 
 class GitWorkspacePreparer:
@@ -94,14 +102,14 @@ class RunService:
         catalog: dict[str, BenchmarkCase],
         store: TraceStore,
         workspace_preparer: WorkspacePreparer,
-        sandbox: SandboxRunner,
+        sandbox_factory: SandboxFactory,
         architecture_factory: ArchitectureFactory,
         reviewer: Reviewer,
     ) -> None:
         self.catalog = catalog
         self.store = store
         self.workspace_preparer = workspace_preparer
-        self.sandbox = sandbox
+        self.sandbox_factory = sandbox_factory
         self.architecture_factory = architecture_factory
         self.reviewer = reviewer
 
@@ -178,8 +186,9 @@ class RunService:
             )
 
         try:
+            sandbox = self.sandbox_factory.for_case(case)
             workspace = self.workspace_preparer.prepare(case, run_id)
-            reproduction = self.sandbox.run(
+            reproduction = sandbox.run(
                 workspace, case.reproduce_command, timeout_seconds=budget.max_seconds
             )
             total_usage = _add_usage(
@@ -218,7 +227,9 @@ class RunService:
                     review_reasons=["time_budget_exhausted"],
                 )
 
-            architecture_result = self.architecture_factory(architecture, case, workspace).run(
+            architecture_result = self.architecture_factory(
+                architecture, case, workspace, sandbox
+            ).run(
                 case,
                 workspace,
                 budget,
@@ -264,7 +275,7 @@ class RunService:
                     review_reasons=["time_budget_exhausted"],
                 )
 
-            verification = self.sandbox.run(
+            verification = sandbox.run(
                 workspace,
                 case.verify_command,
                 timeout_seconds=_remaining_seconds(total_usage, budget),
