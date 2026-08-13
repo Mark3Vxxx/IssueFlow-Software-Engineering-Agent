@@ -1,0 +1,28 @@
+{
+  "case_id": "nanochat-h01",
+  "accepted_split": "strict",
+  "reasons": [],
+  "replays": [
+    {
+      "replay": 1,
+      "reproduction": "FAIL_AS_EXPECTED",
+      "public_verification": "PASS",
+      "hidden_verification": "PASS"
+    },
+    {
+      "replay": 2,
+      "reproduction": "FAIL_AS_EXPECTED",
+      "public_verification": "PASS",
+      "hidden_verification": "PASS"
+    },
+    {
+      "replay": 3,
+      "reproduction": "FAIL_AS_EXPECTED",
+      "public_verification": "PASS",
+      "hidden_verification": "PASS"
+    }
+  ],
+  "environment_id": "nanochat",
+  "revision": "02baa154058605d16cc99da4fa8fbf5f9c9908f0",
+  "reference_patch_sha256": "4decca2123cb85ff28a11a9057d315c7a492e6ee9f497483efdcea2d797bafb3"
+}
