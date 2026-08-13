@@ -1,0 +1,28 @@
+{
+  "case_id": "nanogpt-h02",
+  "accepted_split": "strict",
+  "reasons": [],
+  "replays": [
+    {
+      "replay": 1,
+      "reproduction": "FAIL_AS_EXPECTED",
+      "public_verification": "PASS",
+      "hidden_verification": "PASS"
+    },
+    {
+      "replay": 2,
+      "reproduction": "FAIL_AS_EXPECTED",
+      "public_verification": "PASS",
+      "hidden_verification": "PASS"
+    },
+    {
+      "replay": 3,
+      "reproduction": "FAIL_AS_EXPECTED",
+      "public_verification": "PASS",
+      "hidden_verification": "PASS"
+    }
+  ],
+  "environment_id": "nanogpt",
+  "revision": "a82b33b525ca9855d705656387698e13eb8e8d4b",
+  "reference_patch_sha256": "e63d10445b344a24a89f0710a648e2fad2856abd9e439516e8ec9d9d220e6553"
+}

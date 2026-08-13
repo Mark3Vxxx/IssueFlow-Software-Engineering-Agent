@@ -40,3 +40,43 @@ cases:
     hidden_test_path: nanogpt-h01/test_hidden.py
     hidden_verify_command: python -m pytest /issueflow-hidden/test_hidden.py
     fixed_revision: c3f254844d63ece0b6481e9d9777d740a66eb965
+  - id: nanogpt-h02
+    dataset_split: strict
+    repository_id: nanogpt
+    environment_id: nanogpt
+    kind: historical
+    budget_profile: small
+    difficulty: small
+    issue_category: model_training
+    repository_url: https://github.com/karpathy/nanoGPT
+    revision: a82b33b525ca9855d705656387698e13eb8e8d4b
+    license: MIT
+    issue: scaled_dot_product_attention is called with dropout_p=self.dropout unconditionally, so dropout is applied even in eval mode, making inference non-deterministic.
+    source_url: https://github.com/karpathy/nanoGPT/commit/7399dfe39d24579cc1fb391475864ad28f19f6f7
+    reproduce_command: python -c "import torch; from model import GPT, GPTConfig; torch.manual_seed(0); m = GPT(GPTConfig(dropout=0.5, block_size=32, n_layer=1, n_head=1, n_embd=8, vocab_size=65)); m.eval(); idx = torch.randint(0, 65, (1, 32)); l1, _ = m(idx); l2, _ = m(idx); assert torch.allclose(l1, l2), 'eval non-deterministic'"
+    verify_command: python -c "import torch; from model import GPT, GPTConfig; torch.manual_seed(0); m = GPT(GPTConfig(dropout=0.5, block_size=32, n_layer=1, n_head=1, n_embd=8, vocab_size=65)); m.eval(); idx = torch.randint(0, 65, (1, 32)); l1, _ = m(idx); l2, _ = m(idx); assert torch.allclose(l1, l2), 'eval non-deterministic'"
+    reference_patch: nanogpt-h02/reference.patch
+    construction_notes: Historical repair from commit 7399dfe; flash attention ignored eval mode for dropout.
+    hidden_test_path: nanogpt-h02/test_hidden.py
+    hidden_verify_command: python -m pytest /issueflow-hidden/test_hidden.py
+    fixed_revision: 7399dfe39d24579cc1fb391475864ad28f19f6f7
+  - id: nanogpt-h03
+    dataset_split: strict
+    repository_id: nanogpt
+    environment_id: nanogpt
+    kind: historical
+    budget_profile: small
+    difficulty: small
+    issue_category: model_training
+    repository_url: https://github.com/karpathy/nanoGPT
+    revision: 57735f532df142cf9d1012061b93ab53e58c462b
+    license: MIT
+    issue: generate() calls torch.topk(logits, top_k) without clamping, so a top_k larger than the vocabulary size raises a RuntimeError.
+    source_url: https://github.com/karpathy/nanoGPT/commit/91d02510ce8c832923d0a6408d983e2d55f0291e
+    reproduce_command: python -c "import torch; from model import GPT, GPTConfig; m = GPT(GPTConfig(vocab_size=65, block_size=32, n_layer=1, n_head=1, n_embd=8)); m.eval(); idx = torch.randint(0, 65, (1, 4)); m.generate(idx, max_new_tokens=1, top_k=100)"
+    verify_command: python -c "import torch; from model import GPT, GPTConfig; m = GPT(GPTConfig(vocab_size=65, block_size=32, n_layer=1, n_head=1, n_embd=8)); m.eval(); idx = torch.randint(0, 65, (1, 4)); m.generate(idx, max_new_tokens=1, top_k=100)"
+    reference_patch: nanogpt-h03/reference.patch
+    construction_notes: Historical repair from commit 91d0251; top_k sampling crashed above vocab size.
+    hidden_test_path: nanogpt-h03/test_hidden.py
+    hidden_verify_command: python -m pytest /issueflow-hidden/test_hidden.py
+    fixed_revision: 91d02510ce8c832923d0a6408d983e2d55f0291e
