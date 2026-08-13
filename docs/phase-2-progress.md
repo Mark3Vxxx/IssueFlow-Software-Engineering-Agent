@@ -5,15 +5,15 @@ Update this table only from verified milestone gates.
 | Milestone | Tasks done | Verification | Paid spend | Status |
 | --- | ---: | --- | ---: | --- |
 | 2A Architectures | 8/8 | Tests PASS; reviewer-budget fix reviewed clean | CNY 0 | Complete |
-| 2B Benchmark | 0/8 | 0/20 strict × 3 | CNY 0 | Not started |
+| 2B Benchmark | 4/8 | Framework PASS; 0/20 strict × 3 | CNY 0 | In progress |
 | 2C Experiments | 0/10 | 0/160 trials | CNY 0 | Not started |
 | 2D Results | 0/6 | Not run | CNY 0 | Not started |
 
 ## 当前快照（2026-08-13）
 
-- 工作分支：`main`（2A 已合并；Reviewer 统一预算收尾修复待提交）
-- 2A 的 8 个实施任务已完成，Reviewer 统一预算阻塞项已关闭，并通过独立复审（无 Critical/Important 发现），里程碑状态为 `Complete`。
-- 当前累计付费 API 支出：`CNY 0`。所有现有架构验证均使用确定性脚本模型。
+- 工作分支：`main`
+- 2A 已 `Complete`；2B 的 4 个框架代码任务（catalog 拆分、环境 registry、隐藏验证隔离、三次重放资格验证器）已完成并提交，剩余为数据构建阶段（仓库筛选 + 严格/探索样本）。
+- 当前累计付费 API 支出：`CNY 0`。所有现有架构与验证均使用确定性脚本模型。
 
 ## 已验证证据
 
@@ -40,16 +40,16 @@ Update this table only from verified milestone gates.
 
 ## 后续任务
 
-### 2A 收尾修复（已完成，待提交）
+### 2A 收尾修复（已完成，已提交）
 
-Reviewer 统一预算收尾已完成：独立计划见 `docs/superpowers/plans/2026-08-13-issueflow-reviewer-unified-budget.md`；六个回归测试全部落地并通过；Phase 1 / Phase 2 / 兼容矩阵 / 凭据扫描 / `git diff --check` 全绿；独立复审无 Critical / Important 发现。待用户确认提交后 2A 正式关闭。
+Reviewer 统一预算收尾已完成并提交（`84212a8` + `883f806`）：独立计划见 `docs/superpowers/plans/2026-08-13-issueflow-reviewer-unified-budget.md`；六个回归测试全部落地并通过；Phase 1 / Phase 2 / 兼容矩阵 / 凭据扫描 / `git diff --check` 全绿；独立复审无 Critical / Important 发现。
 
 ### 2B Benchmark Expansion
 
-2A 正式关闭后开始；付费 2C 实验继续保持禁止状态。
+框架代码已完成（`7171bf3` catalog 拆分、`116cf4f` 环境 registry、`06a9315` 隐藏验证隔离、`8330c03` 三次重放资格验证器）。付费 2C 实验继续保持禁止状态。剩余为数据构建阶段：
 
-1. 资格筛选候选仓库，并由用户批准 3–4 个仓库、许可证和 strict/exploratory 分类。
-2. 构建 20 个新的严格案例和至少 10 个探索案例；五个 Phase 1 micrograd 案例只作为兼容套件，不计入新严格案例。
+1. 资格筛选候选仓库，并由用户批准 3–4 个仓库、许可证和 strict/exploratory 分类。（**用户审批门**）
+2. 构建 20 个新的严格案例和至少 10 个探索案例；五个 Phase 1 micrograd 案例只作为兼容套件，不计入新严格案例。（**真人学习门**）
 3. 每个严格案例必须在修复前失败、应用参考修复后通过公开与隐藏验证，并在三个干净工作区中稳定重放。
 4. 运行来源、环境、泄漏和隐藏测试隔离检查；参考补丁与隐藏测试不得进入 Agent 可见工作区。
 5. 更新进度为实际通过三次重放的严格案例数，不为赶进度降低验收门槛。
